@@ -1,4 +1,5 @@
 - name: stride-etl-stats-collect
+  schedule_interval: "@daily"
   description: |
     Collect and show stats about stride data.
     {
