@@ -10,6 +10,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         OPEN_BUS_PIPELINES_DEPLOY_KEY: ${{ secrets.OPEN_BUS_PIPELINES_DEPLOY_KEY }}
       run: |
+        python3 -m pip install ruamel.yaml &&\
+        bin/validate_airflow_yaml.py airflow.yaml &&\
         git config --global user.name "Open Bus Stride ETL CI" &&\
         git config --global user.email "open-bus-stride-etl-ci@localhost" &&\
         OPEN_BUS_STRIDE_ETL_ROOTDIR="$(pwd)" &&\

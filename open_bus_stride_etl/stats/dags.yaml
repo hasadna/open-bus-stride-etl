@@ -1,0 +1,16 @@
+- name: stride-etl-stats-collect
+  description: |
+    Collect and show stats about stride data.
+    {
+        "latest-siri-snapshots-limit": 10,
+        "last-days-limit": 5,
+        "last-days-from": "2021-07-12"
+    }
+  config:
+    type: cli
+    module: open_bus_stride_etl.stats.cli
+    function': collect
+    kwargs:
+      latest_siri_snapshots_limit: {default: 10}
+      last_days_limit: {default: 5}
+      last_days_from: {}
