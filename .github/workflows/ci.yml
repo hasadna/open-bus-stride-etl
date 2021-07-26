@@ -1,0 +1,29 @@
+name: CI
+on:
+  push:
+jobs:
+  ci:
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: actions/checkout@v2
+    - env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        OPEN_BUS_PIPELINES_DEPLOY_KEY: ${{ secrets.OPEN_BUS_PIPELINES_DEPLOY_KEY }}
+      run: |
+        git config --global user.name "Open Bus Stride ETL CI" &&\
+        git config --global user.email "open-bus-stride-etl-ci@localhost" &&\
+        OPEN_BUS_STRIDE_ETL_ROOTDIR="$(pwd)" &&\
+        if [ "${GITHUB_REF}" == "refs/heads/main" ]; then
+          if ! git log -1 --pretty=format:"%s" | grep -- --no-deploy; then
+            cd `mktemp -d` &&\
+            echo "${OPEN_BUS_PIPELINES_DEPLOY_KEY}" > open_bus_pipelines_deploy_key &&\
+            chmod 400 open_bus_pipelines_deploy_key &&\
+            export GIT_SSH_COMMAND="ssh -i `pwd`/open_bus_pipelines_deploy_key -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" &&\
+            git clone git@github.com:hasadna/open-bus-pipelines.git &&\
+            cd open-bus-pipelines &&\
+            ( cd $OPEN_BUS_STRIDE_ETL_ROOTDIR && bin/get_stride_etl_requirements.py "${GITHUB_SHA}" ) > requirements-stride-etl.txt &&\
+            git add requirements-stride-etl.txt &&\
+            git commit -m "automatic update of stride etl requirements" &&\
+            git push origin main
+          fi
+        fi
