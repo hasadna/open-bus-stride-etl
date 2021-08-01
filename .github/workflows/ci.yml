@@ -7,15 +7,27 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - env:
+        DOCKER_APP_IMAGE_NAME: "docker.pkg.github.com/hasadna/open-bus-stride-etl/open-bus-stride-etl"
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         OPEN_BUS_PIPELINES_DEPLOY_KEY: ${{ secrets.OPEN_BUS_PIPELINES_DEPLOY_KEY }}
       run: |
+        echo "${GITHUB_TOKEN}" | docker login docker.pkg.github.com -u hasadna --password-stdin &&\
+        if docker pull "${DOCKER_APP_IMAGE_NAME}:latest"; then
+          CACHE_FROM_ARG="--cache-from ${DOCKER_APP_IMAGE_NAME}:latest"
+        else
+          CACHE_FROM_ARG=""
+        fi &&\
+        docker build $CACHE_FROM_ARG -t app . &&\
+        docker tag app "${DOCKER_APP_IMAGE_NAME}:${GITHUB_SHA}" &&\
+        docker push "${DOCKER_APP_IMAGE_NAME}:${GITHUB_SHA}" &&\
         python3 -m pip install ruamel.yaml &&\
         bin/validate_airflow_yaml.py airflow.yaml &&\
         git config --global user.name "Open Bus Stride ETL CI" &&\
         git config --global user.email "open-bus-stride-etl-ci@localhost" &&\
         OPEN_BUS_STRIDE_ETL_ROOTDIR="$(pwd)" &&\
         if [ "${GITHUB_REF}" == "refs/heads/main" ]; then
+          docker tag app "${DOCKER_APP_IMAGE_NAME}:latest" &&\
+          docker push "${DOCKER_APP_IMAGE_NAME}:latest" &&\
           if ! git log -1 --pretty=format:"%s" | grep -- --no-deploy; then
             cd `mktemp -d` &&\
             echo "${OPEN_BUS_PIPELINES_DEPLOY_KEY}" > open_bus_pipelines_deploy_key &&\
