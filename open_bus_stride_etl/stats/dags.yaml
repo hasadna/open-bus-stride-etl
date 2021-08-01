@@ -3,9 +3,9 @@
   description: |
     Collect and show stats about stride data.
     {
-        "latest-siri-snapshots-limit": 10,
-        "last-days-limit": 5,
-        "last-days-from": "2021-07-12"
+        "latest_siri_snapshots-limit": 10,
+        "last_days_limit": 5,
+        "last_days_from": "2021-07-12"
     }
   tasks:
     - id: stats-collect
