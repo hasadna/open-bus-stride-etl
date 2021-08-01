@@ -2,7 +2,19 @@
 
 ETL processing tasks for Stride data enrichment
 
-## Install
+## Development using the Docker Compose environment
+
+This is the easiest option to start development, follow these instructions: https://github.com/hasadna/open-bus-pipelines/blob/main/README.md#stride-etl
+
+For local development, see the additional functionality section: `Develop stride-etl from a local clone`
+
+## Development using local Python interpreter
+
+It's much easier to use the Docker Compose environment, but the following can be
+refferd to for more details regarding the internal processes and for development
+using your local Python interpreter. 
+
+### Install
 
 Create virtualenv (Python 3.8)
 
@@ -26,7 +38,7 @@ Install dev requirements (this installs above repository as well as this reposit
 venv/bin/pip install -r requirements-dev.txt
 ```
 
-## Use
+### Use
 
 Go to open-bus-stride-db repo, pull to update to latest version and follow the 
 README to start a local DB and update to latest database migration
