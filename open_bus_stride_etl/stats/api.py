@@ -1,6 +1,7 @@
 import datetime
 
 import pytz
+from ruamel import yaml
 from sqlalchemy import desc, func, and_
 
 from open_bus_stride_db.db import session_decorator, Session  # provides type hinting for session_decorator
@@ -10,6 +11,8 @@ from open_bus_stride_db.model.ride import Ride
 from open_bus_stride_db.model.route import Route
 from open_bus_stride_db.model.route_stop import RouteStop
 from open_bus_stride_db.model.stop import Stop
+
+from ..common import parse_siri_snapshot_id
 
 
 @session_decorator
@@ -97,9 +100,37 @@ def last_day_stats_iterator(session: Session, limit=5, from_=None):
 
 
 @session_decorator
-def collect(session, latest_siri_snapshots_limit=10, last_days_limit=5, last_days_from=None):
-    return {
+def collect(session, latest_siri_snapshots_limit=10, last_days_limit=5, last_days_from=None, print_results=False, validate=False):
+    res = {
         'num_siri_snapshots': session.query(SiriSnapshot).count(),
         'siri_snapshots_iterator': siri_snapshots_iterator(limit=latest_siri_snapshots_limit),
         'last_day_stats_iterator': last_day_stats_iterator(limit=last_days_limit, from_=last_days_from)
     }
+    if print_results:
+        print('total_siri_snapshots: {}'.format(res['num_siri_snapshots']))
+        print('last_days:  # last {} days'.format(last_days_limit))
+        for last_day_stats in res['last_day_stats_iterator']:
+            print(yaml.safe_dump([last_day_stats]).strip())
+        print('latest_siri_snapshots:  # latest {} siri snapshots'.format(latest_siri_snapshots_limit))
+        latest_snapshot_datetime = None
+        for siri_snapshot in res['siri_snapshots_iterator']:
+            snapshot_datetime = parse_siri_snapshot_id(siri_snapshot['snapshot_id'])
+            if not latest_snapshot_datetime or latest_snapshot_datetime < snapshot_datetime:
+                latest_snapshot_datetime = snapshot_datetime
+            print(yaml.safe_dump([siri_snapshot]).strip())
+        if validate:
+            is_valid = True
+            if not latest_snapshot_datetime:
+                print("VALIDATION ERROR: no latest snapshot")
+                is_valid = False
+            elif latest_snapshot_datetime < (datetime.datetime.now(pytz.UTC) - datetime.timedelta(hours=1)):
+                print("VALIDATION ERROR: latest snapshot is older than 1 hour: {}".format(latest_snapshot_datetime))
+                is_valid = False
+            else:
+                print("VALIDATION SUCCESS: latest snapshot is not older then 1 hour: {}".format(latest_snapshot_datetime))
+            return is_valid
+        else:
+            return True
+    else:
+        assert not validate, 'validate is not supported if print_results is False'
+        return res

@@ -17,3 +17,5 @@
           latest_siri_snapshots_limit: {default: 10}
           last_days_limit: {default: 5}
           last_days_from: {}
+          validate: true
+
