@@ -5,7 +5,8 @@
     {
         "latest_siri_snapshots-limit": 10,
         "last_days_limit": 5,
-        "last_days_from": "2021-07-12"
+        "last_days_from": "2021-07-12",
+        "validate": true
     }
   tasks:
     - id: stats-collect
@@ -17,5 +18,4 @@
           latest_siri_snapshots_limit: {default: 10}
           last_days_limit: {default: 5}
           last_days_from: {}
-          validate: true
-
+          validate: {default: true}
