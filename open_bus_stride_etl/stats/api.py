@@ -6,11 +6,11 @@ from sqlalchemy import desc, func, and_
 
 from open_bus_stride_db.db import session_decorator, Session  # provides type hinting for session_decorator
 from open_bus_stride_db.model.siri_snapshot import SiriSnapshot, SiriSnapshotEtlStatusEnum
-from open_bus_stride_db.model.vehicle_location import VehicleLocation
-from open_bus_stride_db.model.ride import Ride
-from open_bus_stride_db.model.route import Route
-from open_bus_stride_db.model.route_stop import RouteStop
-from open_bus_stride_db.model.stop import Stop
+from open_bus_stride_db.model.siri_vehicle_location import SiriVehicleLocation
+from open_bus_stride_db.model.siri_ride import SiriRide
+from open_bus_stride_db.model.siri_route import SiriRoute
+from open_bus_stride_db.model.siri_ride_stop import SiriRideStop
+from open_bus_stride_db.model.siri_stop import SiriStop
 
 from ..common import parse_siri_snapshot_id
 
@@ -27,7 +27,7 @@ def siri_snapshots_iterator(session, limit):
             'error': siri_snapshot.error,
             'num_successful_parse_vehicle_locations': siri_snapshot.num_successful_parse_vehicle_locations,
             'num_failed_parse_vehicle_locations': siri_snapshot.num_failed_parse_vehicle_locations,
-            'vehicle_locations': len(siri_snapshot.vehicle_locations),
+            'vehicle_locations': len(siri_snapshot.siri_vehicle_locations),
         }
 
 
@@ -40,7 +40,6 @@ def last_day_stats_iterator(session: Session, limit=5, from_=None):
         date = from_ - datetime.timedelta(days=i)
         datetime_from = pytz.timezone('israel').localize(datetime.datetime(date.year, date.month, date.day, 0, 0))
         datetime_to = datetime_from + datetime.timedelta(days=1)
-        session.query(RouteStop).join(Route)
         yield {
             'date': date,
             'siri_snapshot': {
@@ -51,49 +50,29 @@ def last_day_stats_iterator(session: Session, limit=5, from_=None):
                     SiriSnapshot.snapshot_id.like(datetime_from.strftime('%Y/%m/%d/') + '%')
                 ).count()
             },
-            'vehicle_location': {
-                'by_snapshot_id': session.query(VehicleLocation).filter(
-                    VehicleLocation.siri_snapshot.has(SiriSnapshot.snapshot_id.like(datetime_from.strftime('%Y/%m/%d/') + '%'))
+            'siri_vehicle_location': {
+                'by_snapshot_id': session.query(SiriVehicleLocation).filter(
+                    SiriVehicleLocation.siri_snapshot.has(SiriSnapshot.snapshot_id.like(datetime_from.strftime('%Y/%m/%d/') + '%'))
                 ).count(),
             },
-            'ride': {
-                'is_from_gtfs': session.query(Ride).filter(
-                    Ride.scheduled_start_time <= datetime_to, Ride.scheduled_start_time >= datetime_from,
-                    Ride.is_from_gtfs == True
-                ).count(),
-                'not_from_gtfs': session.query(Ride).filter(
-                    Ride.scheduled_start_time <= datetime_to, Ride.scheduled_start_time >= datetime_from,
-                    Ride.is_from_gtfs != True
+            'siri_ride': {
+                'by_scheduled_start_time': session.query(SiriRide).filter(
+                    SiriRide.scheduled_start_time <= datetime_to, SiriRide.scheduled_start_time >= datetime_from,
                 ).count(),
             },
-            'route': {
-                'by_rides_is_from_gtfs': session.query(Route).filter(
-                    Route.rides.any(and_(Ride.scheduled_start_time <= datetime_to, Ride.scheduled_start_time >= datetime_from)),
-                    Route.is_from_gtfs == True
-                ).count(),
-                'by_rides_not_from_gtfs': session.query(Route).filter(
-                    Route.rides.any(and_(Ride.scheduled_start_time <= datetime_to, Ride.scheduled_start_time >= datetime_from)),
-                    Route.is_from_gtfs != True
+            'siri_route': {
+                'by_ride_scheduled_start_time': session.query(SiriRoute).filter(
+                    SiriRoute.siri_rides.any(and_(SiriRide.scheduled_start_time <= datetime_to, SiriRide.scheduled_start_time >= datetime_from))
                 ).count(),
             },
-            'route_stop': {
-                'by_route_is_from_gtfs': session.query(RouteStop).join(Route).join(Ride).filter(
-                    Ride.scheduled_start_time <= datetime_to, Ride.scheduled_start_time >= datetime_from,
-                    Route.is_from_gtfs == True
-                ).count(),
-                'by_route_not_from_gtfs': session.query(RouteStop).join(Route).join(Ride).filter(
-                    Ride.scheduled_start_time <= datetime_to, Ride.scheduled_start_time >= datetime_from,
-                    Route.is_from_gtfs != True
+            'siri_ride_stop': {
+                'by_ride_scheduled_start_time': session.query(SiriRideStop).join(SiriRide).filter(
+                    SiriRide.scheduled_start_time <= datetime_to, SiriRide.scheduled_start_time >= datetime_from
                 ).count(),
             },
-            'stop': {
-                'by_route_stop_is_from_gtfs': session.query(Stop).join(RouteStop).join(Route).join(Ride).filter(
-                    Ride.scheduled_start_time <= datetime_to, Ride.scheduled_start_time >= datetime_from,
-                    Route.is_from_gtfs == True
-                ).count(),
-                'by_route_stop_not_from_gtfs': session.query(Stop).join(RouteStop).join(Route).join(Ride).filter(
-                    Ride.scheduled_start_time <= datetime_to, Ride.scheduled_start_time >= datetime_from,
-                    Route.is_from_gtfs != True
+            'siri_stop': {
+                'by_ride_stop_ride_scheduled_start_time': session.query(SiriStop).join(SiriRideStop).join(SiriRide).filter(
+                    SiriRide.scheduled_start_time <= datetime_to, SiriRide.scheduled_start_time >= datetime_from
                 ).count(),
             }
         }
