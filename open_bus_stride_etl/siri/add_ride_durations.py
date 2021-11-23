@@ -56,7 +56,7 @@ def main(session: Session):
                 first_row and last_row
                 and first_row.recorded_at_time
                 and last_row.recorded_at_time
-                and last_row.recorded_at_time > first_row.recorded_at_time
+                and first_row.recorded_at_time < last_row.recorded_at_time < datetime.datetime.now() - datetime.timedelta(hours=6)
         ):
             siri_ride.duration_minutes = round((last_row.recorded_at_time - first_row.recorded_at_time).total_seconds() / 60)
             stats['num_rows_updated_duration_minutes'] += 1
