@@ -1,6 +1,7 @@
 import click
 
 from .stats.cli import stats
+from .siri.cli import siri
 
 
 @click.group(context_settings={'max_content_width': 200})
@@ -10,3 +11,4 @@ def main():
 
 
 main.add_command(stats)
+main.add_command(siri)
