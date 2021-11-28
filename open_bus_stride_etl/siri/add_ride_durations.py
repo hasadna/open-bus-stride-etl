@@ -22,6 +22,50 @@ GET_FIRST_LAST_SQL_QUERY_TEMPLATE = dedent("""
 """)
 
 
+def get_first_last_row(session, siri_ride_id, order_by):
+    result: ResultProxy = session.execute(GET_FIRST_LAST_SQL_QUERY_TEMPLATE.format(
+        siri_ride_id=siri_ride_id, order_by=order_by)
+    )
+    row: Row = result.one_or_none()
+    return row
+
+
+def update_first_last_vehicle_locations(siri_ride, first_row, last_row, stats):
+    is_updated = False
+    if first_row and first_row.id != siri_ride.first_vehicle_location_id:
+        siri_ride.first_vehicle_location_id = first_row.id
+        is_updated = True
+        stats['num_rows_first_vehicle_location_updated'] += 1
+    if last_row and last_row.id != siri_ride.last_vehicle_location_id:
+        siri_ride.last_vehicle_location_id = last_row.id
+        is_updated = True
+        stats['num_rows_last_vehicle_location_updated'] += 1
+    if not siri_ride.updated_first_last_vehicle_locations:
+        is_updated = True
+        stats['num_rows_missing_first_last_last_updated'] += 1
+    if is_updated:
+        siri_ride.updated_first_last_vehicle_locations = common.now()
+
+
+def update_duration_minutes(siri_ride, first_row, last_row, stats):
+    is_updated = False
+    if (
+            first_row and last_row
+            and first_row.recorded_at_time
+            and last_row.recorded_at_time
+            and common.utc(first_row.recorded_at_time) < common.utc(last_row.recorded_at_time) < common.now_minus(hours=6)
+    ):
+        siri_ride.duration_minutes = round((last_row.recorded_at_time - first_row.recorded_at_time).total_seconds() / 60)
+        stats['num_rows_updated_duration_minutes'] += 1
+        is_updated = True
+    elif siri_ride.updated_first_last_vehicle_locations < common.now_minus(days=2):
+        siri_ride.duration_minutes = 0
+        stats['num_rows_too_old_not_updated_duration_minutes'] += 1
+        is_updated = True
+    if is_updated:
+        siri_ride.updated_duration_minutes = common.now()
+
+
 @session_decorator
 def main(session: Session):
     stats = defaultdict(int)
@@ -30,43 +74,10 @@ def main(session: Session):
     print("Total rows to update: {}".format(total_rows))
     siri_ride: SiriRide
     for siri_ride in query:
-        first_result: ResultProxy = session.execute(GET_FIRST_LAST_SQL_QUERY_TEMPLATE.format(
-            siri_ride_id=siri_ride.id, order_by='asc')
-        )
-        first_row: Row = first_result.one_or_none()
-        last_result: ResultProxy = session.execute(GET_FIRST_LAST_SQL_QUERY_TEMPLATE.format(
-            siri_ride_id=siri_ride.id, order_by='desc')
-        )
-        last_row: Row = last_result.one_or_none()
-        first_last_updated = False
-        if first_row and first_row.id != siri_ride.first_vehicle_location_id:
-            siri_ride.first_vehicle_location_id = first_row.id
-            first_last_updated = True
-            stats['num_rows_first_vehicle_location_updated'] += 1
-        elif last_row and last_row.id != siri_ride.last_vehicle_location_id:
-            siri_ride.last_vehicle_location_id = last_row.id
-            first_last_updated = True
-            stats['num_rows_last_vehicle_location_updated'] += 1
-        elif not siri_ride.updated_first_last_vehicle_locations:
-            first_last_updated = True
-            stats['num_rows_missing_first_last_last_updated'] += 1
-        if first_last_updated:
-            siri_ride.updated_first_last_vehicle_locations = common.now()
-        duration_minutes_updated = False
-        if (
-                first_row and last_row
-                and first_row.recorded_at_time
-                and last_row.recorded_at_time
-                and common.utc(first_row.recorded_at_time) < common.utc(last_row.recorded_at_time) < common.now_minus(hours=6)
-        ):
-            siri_ride.duration_minutes = round((last_row.recorded_at_time - first_row.recorded_at_time).total_seconds() / 60)
-            stats['num_rows_updated_duration_minutes'] += 1
-            duration_minutes_updated = True
-        elif siri_ride.updated_first_last_vehicle_locations < common.now_minus(days=2):
-            stats['num_rows_too_old_not_updated_duration_minutes'] += 1
-            duration_minutes_updated = True
-        if duration_minutes_updated:
-            siri_ride.updated_duration_minutes = common.now()
+        first_row = get_first_last_row(session, siri_ride.id, 'asc')
+        last_row = get_first_last_row(session, siri_ride.id, 'desc')
+        update_first_last_vehicle_locations(siri_ride, first_row, last_row, stats)
+        update_duration_minutes(siri_ride, first_row, last_row, stats)
         stats['num_rows'] += 1
         if stats['num_rows'] % 10000 == 0:
             pprint(dict(stats))
