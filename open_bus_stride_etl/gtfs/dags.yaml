@@ -1,0 +1,11 @@
+- name: stride-etl-gtfs-update-ride-aggregations
+  description: |
+    Update aggregation data to gtfs rides
+  tasks:
+    - id: gtfs-update-ride-aggregations
+      config:
+        type: cli
+        module: open_bus_stride_etl.gtfs.cli
+        function: update_ride_aggregations
+        kwargs:
+          date: {}

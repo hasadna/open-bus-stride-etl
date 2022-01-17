@@ -2,6 +2,7 @@ import click
 
 from .stats.cli import stats
 from .siri.cli import siri
+from .gtfs.cli import gtfs
 
 
 @click.group(context_settings={'max_content_width': 200})
@@ -12,3 +13,4 @@ def main():
 
 main.add_command(stats)
 main.add_command(siri)
+main.add_command(gtfs)
