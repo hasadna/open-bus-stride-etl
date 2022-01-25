@@ -5,22 +5,25 @@ from .. import common
 from open_bus_stride_db import db
 
 
-def iterate_siri_route_id_dates(extra_where_sql=None):
-    if extra_where_sql:
-        extra_where_sql = 'and {}'.format(extra_where_sql)
+def iterate_siri_route_id_dates(where_sql=None, extra_from_sql=None):
+    if where_sql:
+        where_sql = 'where {}'.format(where_sql)
     else:
-        extra_where_sql = ''
+        where_sql = ''
+    if extra_from_sql:
+        extra_from_sql = ', {}'.format(extra_from_sql)
+    else:
+        extra_from_sql = ''
     date_siri_route_ids = {}
     with common.print_memory_usage("Getting siri_route_ids / dates..."):
         with db.get_session() as session:
             for row in session.execute(dedent("""
                         select date_trunc('day', siri_ride.scheduled_start_time) scheduled_start_date, siri_ride.siri_route_id
-                        from siri_ride_stop, siri_ride
-                        where siri_ride.id = siri_ride_stop.siri_ride_id
+                        from siri_ride {}
                         {}
                         group by date_trunc('day', siri_ride.scheduled_start_time), siri_ride.siri_route_id
                         order by date_trunc('day', siri_ride.scheduled_start_time), siri_ride.siri_route_id
-                    """).format(extra_where_sql)):
+                    """).format(extra_from_sql, where_sql)):
                 date_siri_route_ids.setdefault(row.scheduled_start_date.strftime('%Y-%m-%d'), set()).add(row.siri_route_id)
     if len(date_siri_route_ids) > 0:
         print("Date: num siri route ids")

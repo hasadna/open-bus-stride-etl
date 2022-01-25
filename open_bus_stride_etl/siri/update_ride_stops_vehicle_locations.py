@@ -45,10 +45,14 @@ def process_ride_rows(rows, session, stats):
 
 def main():
     stats = defaultdict(int)
-    for date, siri_route_ids in iterate_siri_route_id_dates(dedent("""
-        siri_ride_stop.nearest_siri_vehicle_location_id is null
-        and siri_ride_stop.gtfs_stop_id is not null
-    """)):
+    for date, siri_route_ids in iterate_siri_route_id_dates(
+        extra_from_sql='siri_ride_stop',
+        where_sql=dedent("""
+            siri_ride.id = siri_ride_stop.siri_ride_id
+            and siri_ride_stop.nearest_siri_vehicle_location_id is null
+            and siri_ride_stop.gtfs_stop_id is not null
+        """)
+    ):
         for siri_route_id in siri_route_ids:
             with db.get_session() as session:
                 current_ride = {}
