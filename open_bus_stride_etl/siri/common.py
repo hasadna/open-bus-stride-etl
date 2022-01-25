@@ -17,13 +17,15 @@ def iterate_siri_route_id_dates(where_sql=None, extra_from_sql=None):
     date_siri_route_ids = {}
     with common.print_memory_usage("Getting siri_route_ids / dates..."):
         with db.get_session() as session:
-            for row in session.execute(dedent("""
-                        select date_trunc('day', siri_ride.scheduled_start_time) scheduled_start_date, siri_ride.siri_route_id
-                        from siri_ride {}
-                        {}
-                        group by date_trunc('day', siri_ride.scheduled_start_time), siri_ride.siri_route_id
-                        order by date_trunc('day', siri_ride.scheduled_start_time), siri_ride.siri_route_id
-                    """).format(extra_from_sql, where_sql)):
+            sql = dedent("""
+                select date_trunc('day', siri_ride.scheduled_start_time) scheduled_start_date, siri_ride.siri_route_id
+                from siri_ride {}
+                {}
+                group by date_trunc('day', siri_ride.scheduled_start_time), siri_ride.siri_route_id
+                order by date_trunc('day', siri_ride.scheduled_start_time), siri_ride.siri_route_id
+            """).format(extra_from_sql, where_sql)
+            print(sql)
+            for row in session.execute(sql):
                 date_siri_route_ids.setdefault(row.scheduled_start_date.strftime('%Y-%m-%d'), set()).add(row.siri_route_id)
     if len(date_siri_route_ids) > 0:
         print("Date: num siri route ids")
