@@ -1,6 +1,8 @@
 import datetime
+from contextlib import contextmanager
 
 import pytz
+import psutil
 
 
 def parse_siri_snapshot_id(snapshot_id):
@@ -26,3 +28,10 @@ def parse_date_str(date):
     if not date or date == 'None':
         return datetime.date.today()
     return datetime.datetime.strptime(date, '%Y-%m-%d').date()
+
+
+@contextmanager
+def print_memory_usage(start_msg, end_msg="Done"):
+    print(start_msg)
+    yield
+    print("{}. Resident memory: {}mb".format(end_msg, psutil.Process().memory_info().rss / (1024 * 1024)))

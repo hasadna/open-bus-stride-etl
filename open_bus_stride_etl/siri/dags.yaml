@@ -8,3 +8,8 @@
         type: cli
         module: open_bus_stride_etl.siri.cli
         function: add_ride_durations
+    - id: siri-update-ride-stops-gtfs
+      config:
+        type: cli
+        module: open_bus_stride_etl.siri.cli
+        function: update_ride_stops_gtfs
