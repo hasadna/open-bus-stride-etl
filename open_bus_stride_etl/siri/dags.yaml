@@ -1,7 +1,7 @@
-- name: stride-etl-siri-add-ride-durations
+- name: stride-etl-siri-updates
   schedule_interval: "@hourly"
   description: |
-    Add duration minutes to all rides
+    Updates for SIRI data
   tasks:
     - id: siri-add-ride-durations
       config:
@@ -9,6 +9,8 @@
         module: open_bus_stride_etl.siri.cli
         function: add_ride_durations
     - id: siri-update-ride-stops-gtfs
+      depends_on:
+        - siri-add-ride-durations
       config:
         type: cli
         module: open_bus_stride_etl.siri.cli
