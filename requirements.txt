@@ -2,3 +2,4 @@ click==7.1.2
 pytz==2021.1
 ruamel.yaml==0.17.10
 psutil==5.9.0
+geopy==2.2.0

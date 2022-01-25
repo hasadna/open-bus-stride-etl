@@ -19,3 +19,10 @@ def update_ride_stops_gtfs():
     """update siri_ride_stop table with the related gtfs_stop data"""
     from .update_ride_stops_gtfs import main
     main()
+
+
+@siri.command()
+def update_ride_stops_vehicle_locations():
+    """update ride_stops with vehicle_location nearest each stop by gtfs lon/lat"""
+    from .update_ride_stops_vehicle_locations import main
+    main()

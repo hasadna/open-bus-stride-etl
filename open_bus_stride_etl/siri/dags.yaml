@@ -15,3 +15,10 @@
         type: cli
         module: open_bus_stride_etl.siri.cli
         function: update_ride_stops_gtfs
+    - id: siri-update-ride-stops-vehicle-locations
+      depends_on:
+        - siri-update-ride-stops-gtfs
+      config:
+        type: cli
+        module: open_bus_stride_etl.siri.cli
+        function: update_ride_stops_vehicle_locations
