@@ -55,7 +55,7 @@ def main():
             and siri_ride_stop.nearest_siri_vehicle_location_id is null
             and siri_ride_stop.gtfs_stop_id is not null
             and siri_ride.scheduled_start_time >= '{min_date}'
-        """).format(min_date=(datetime.datetime.now() - datetime.timedelta(days=5)).strftime('%Y-%m-%d'))
+        """).format(min_date=(datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%Y-%m-%d'))
     ):
         for siri_route_id in siri_route_ids:
             with db.get_session() as session:

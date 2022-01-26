@@ -23,7 +23,7 @@ def main():
             and gtfs_stop.date >= '{min_date}'
             and siri_ride.scheduled_start_time >= '{min_date}'
             and gtfs_stop.date = date_trunc('day', siri_ride.scheduled_start_time)
-        """).format(min_date=(datetime.datetime.now() - datetime.timedelta(days=5)).strftime('%Y-%m-%d'))
+        """).format(min_date=(datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%Y-%m-%d'))
     ):
         for siri_route_id in siri_route_ids:
             stats['updated_siri_routes'] += 1
