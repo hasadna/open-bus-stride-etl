@@ -29,6 +29,7 @@ def main():
             stats['updated_siri_routes'] += 1
             with db.get_session() as session:
                 res: ResultProxy = session.execute(dedent("""
+                    set local synchronous_commit to off;
                     update siri_ride_stop
                     set gtfs_stop_id = gtfs_stop.id
                     from siri_stop, siri_ride, gtfs_stop
@@ -38,7 +39,7 @@ def main():
                     and siri_ride_stop.gtfs_stop_id is null
                     and gtfs_stop.code = siri_stop.code
                     and gtfs_stop.date = '{}'
-                    and siri_ride.siri_route_id = {}
+                    and siri_ride.siri_route_id = {};
                 """).format(date, siri_route_id))
                 stats['updated_ride_stops'] += res.rowcount
                 session.commit()

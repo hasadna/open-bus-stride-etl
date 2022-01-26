@@ -1,3 +1,4 @@
+import datetime
 from pprint import pprint
 from textwrap import dedent
 from collections import defaultdict
@@ -25,7 +26,9 @@ def process_ride_rows(rows, session, stats):
         ):
             ride_stop_nearest_distance[row.siri_ride_stop_id] = distance_meters
             ride_stop_nearest_vehicle_location[row.siri_ride_stop_id] = row.siri_vehicle_location_id
-    updates = []
+    updates = [
+        'set local synchronous_commit to off;'
+    ]
     for vehicle_location_id, distance_meters in vehicle_location_distance.items():
         stats['updated_vehicle_locations'] += 1
         updates.append(dedent("""
@@ -51,7 +54,8 @@ def main():
             siri_ride.id = siri_ride_stop.siri_ride_id
             and siri_ride_stop.nearest_siri_vehicle_location_id is null
             and siri_ride_stop.gtfs_stop_id is not null
-        """)
+            and siri_ride.scheduled_start_time >= '{min_date}'
+        """).format(min_date=(datetime.datetime.now() - datetime.timedelta(days=5)).strftime('%Y-%m-%d'))
     ):
         for siri_route_id in siri_route_ids:
             with db.get_session() as session:
