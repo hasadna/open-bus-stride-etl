@@ -1,4 +1,5 @@
 import datetime
+import traceback
 from pprint import pprint
 from textwrap import dedent
 from collections import defaultdict
@@ -15,17 +16,26 @@ def process_ride_rows(rows, session, stats):
     ride_stop_nearest_distance = {}
     ride_stop_nearest_vehicle_location = {}
     for row in rows:
-        distance_meters = distance(
-            (row.siri_vehicle_location_lat, row.siri_vehicle_location_lon),
-            (row.gtfs_stop_lat, row.gtfs_stop_lon)
-        ).m
-        vehicle_location_distance[row.siri_vehicle_location_id] = distance_meters
-        if (
-            row.siri_ride_stop_id not in ride_stop_nearest_distance
-            or distance_meters < ride_stop_nearest_distance[row.siri_ride_stop_id]
-        ):
-            ride_stop_nearest_distance[row.siri_ride_stop_id] = distance_meters
-            ride_stop_nearest_vehicle_location[row.siri_ride_stop_id] = row.siri_vehicle_location_id
+        try:
+            distance_meters = distance(
+                (row.siri_vehicle_location_lat, row.siri_vehicle_location_lon),
+                (row.gtfs_stop_lat, row.gtfs_stop_lon)
+            ).m
+        except:
+            print("Failed to calculate distance: {},{} -> {},{}".format(
+                row.siri_vehicle_location_lat, row.siri_vehicle_location_lon,
+                row.gtfs_stop_lat, row.gtfs_stop_lon
+            ))
+            traceback.print_exc()
+            distance_meters = None
+        if distance_meters is not None:
+            vehicle_location_distance[row.siri_vehicle_location_id] = distance_meters
+            if (
+                row.siri_ride_stop_id not in ride_stop_nearest_distance
+                or distance_meters < ride_stop_nearest_distance[row.siri_ride_stop_id]
+            ):
+                ride_stop_nearest_distance[row.siri_ride_stop_id] = distance_meters
+                ride_stop_nearest_vehicle_location[row.siri_ride_stop_id] = row.siri_vehicle_location_id
     updates = [
         'set local synchronous_commit to off;'
     ]
