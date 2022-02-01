@@ -21,13 +21,29 @@ def utc(dt: datetime.datetime):
     return dt.astimezone(pytz.UTC)
 
 
-def parse_date_str(date):
-    """Parses a date string in format %Y-%m-%d with default of today if empty"""
+def parse_date_str(date, num_days=None):
+    """Parses a date string in format %Y-%m-%d with default of today if empty
+    if num_days is not None - will use a default of today minus given num_days
+    """
     if isinstance(date, datetime.date):
         return date
-    if not date or date == 'None':
-        return datetime.date.today()
-    return datetime.datetime.strptime(date, '%Y-%m-%d').date()
+    elif not date or date is 'None':
+        return datetime.date.today() if num_days is None else datetime.date.today() - datetime.timedelta(days=num_days)
+    else:
+        return datetime.datetime.strptime(date, '%Y-%m-%d').date()
+
+
+def parse_min_max_date_strs(min_date, max_date, num_days=None):
+    """Parses min/max date strings in format %Y-%m-%d
+     min_date default = today minus num_days
+     max_date default = today"""
+    min_date, max_date = parse_date_str(min_date, num_days), parse_date_str(max_date)
+    assert min_date <= max_date
+    return min_date, max_date
+
+
+def get_db_date_str(d):
+    return d.strftime('%Y-%m-%d')
 
 
 @contextmanager
