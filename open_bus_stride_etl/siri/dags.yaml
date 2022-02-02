@@ -48,7 +48,7 @@
       config:
         type: cli
         module: open_bus_stride_etl.siri.cli
-        function: update-rides-gtfs
+        function: update_rides_gtfs
         kwargs:
           min_date: {}
           max_date: {}
