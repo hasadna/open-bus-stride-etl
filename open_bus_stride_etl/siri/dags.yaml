@@ -15,8 +15,6 @@
     update siri ride-stops with gtfs data
   tasks:
     - id: siri-update-ride-stops-gtfs
-      depends_on:
-        - siri-add-ride-durations
       config:
         type: cli
         module: open_bus_stride_etl.siri.cli
@@ -32,8 +30,6 @@
     update siri ride-stops and vehicle locations
   tasks:
     - id: siri-update-ride-stops-vehicle-locations
-      depends_on:
-        - siri-update-ride-stops-gtfs
       config:
         type: cli
         module: open_bus_stride_etl.siri.cli
