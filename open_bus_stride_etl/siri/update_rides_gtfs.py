@@ -54,10 +54,10 @@ def main(min_date, max_date, num_days):
                 from gtfs_ride, gtfs_route
                 where gtfs_ride.journey_ref = split_part(siri_ride.journey_ref, '-', 4) || '_' || split_part(siri_ride.journey_ref, '-', 3) || split_part(siri_ride.journey_ref, '-', 2) || substr(split_part(siri_ride.journey_ref, '-', 1), 3)
                 and gtfs_route.id = gtfs_ride.gtfs_route_id
-                and gtfs_route.date = '{}';
+                and gtfs_route.date = '{}'
                 -- if we have updated_duration_minutes it means we updated the duration of the ride
                 -- so we have all the ride stops data which we must ensure before making these updates
-                and siri_ride.updated_duration_minutes is not null
+                and siri_ride.updated_duration_minutes is not null;
             """).format(date))
             updated_journey_gtfs_ride_ids += res.rowcount
             updated_route_gtfs_ride_ids += session.execute(
