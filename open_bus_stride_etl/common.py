@@ -28,7 +28,7 @@ def parse_date_str(date, num_days=None):
     if isinstance(date, datetime.date):
         return date
     elif not date or date is 'None':
-        return datetime.date.today() if num_days is None else datetime.date.today() - datetime.timedelta(days=num_days)
+        return datetime.date.today() if num_days is None else datetime.date.today() - datetime.timedelta(days=int(num_days))
     else:
         return datetime.datetime.strptime(date, '%Y-%m-%d').date()
 
