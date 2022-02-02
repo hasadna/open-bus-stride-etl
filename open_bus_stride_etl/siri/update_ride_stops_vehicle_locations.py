@@ -9,6 +9,7 @@ from geopy.distance import distance
 from open_bus_stride_db import db
 
 from .common import iterate_siri_route_id_dates
+from ..common import parse_min_max_date_strs, get_db_date_str
 
 
 def process_ride_rows(rows, session, stats):
@@ -56,7 +57,10 @@ def process_ride_rows(rows, session, stats):
     session.execute(";\n".join(updates))
 
 
-def main():
+def main(min_date, max_date, num_days):
+    min_date, max_date = parse_min_max_date_strs(min_date, max_date, num_days)
+    print(f'min_date={min_date}')
+    print(f'max_date={max_date}')
     stats = defaultdict(int)
     for date, siri_route_ids in iterate_siri_route_id_dates(
         extra_from_sql='siri_ride_stop',
@@ -65,7 +69,8 @@ def main():
             and siri_ride_stop.nearest_siri_vehicle_location_id is null
             and siri_ride_stop.gtfs_stop_id is not null
             and siri_ride.scheduled_start_time >= '{min_date}'
-        """).format(min_date=(datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%Y-%m-%d'))
+            and siri_ride.scheduled_start_time <= '{max_date}'
+        """).format(min_date=get_db_date_str(min_date), max_date=get_db_date_str(max_date))
     ):
         for siri_route_id in siri_route_ids:
             with db.get_session() as session:
@@ -96,4 +101,4 @@ def main():
                 if current_ride.get('rows'):
                     process_ride_rows(current_ride['rows'], session, stats)
                 session.commit()
-                pprint(dict(stats))
+            pprint(dict(stats))
