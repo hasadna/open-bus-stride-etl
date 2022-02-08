@@ -46,22 +46,28 @@ def path_backup(path, path_prefix, backup_path_prefix):
 def main():
     now = datetime.datetime.now(pytz.UTC)
     last_week = now - datetime.timedelta(days=7)
-    for backup_path_prefix, root_path in {
-        'siri_requester': config.OPEN_BUS_SIRI_STORAGE_ROOTPATH,
-        'siri_etl_monitored_stop_visits_parse_failed': os.path.join(config.OPEN_BUS_SIRI_ETL_ROOTPATH, 'monitored_stop_visits_parse_failed'),
-    }.items():
+    for cfg in [
+        {
+            'root_path': config.OPEN_BUS_SIRI_STORAGE_ROOTPATH,
+        },
+        {
+            'root_path': os.path.join(config.OPEN_BUS_SIRI_ETL_ROOTPATH, 'monitored_stop_visits_parse_failed'),
+            'backup_path_prefix': 'siri_etl_monitored_stop_visits_parse_failed'
+        },
+    ]:
         for d in range(30 * 12 * 20):
             path_prefix = (last_week - datetime.timedelta(days=d)).strftime('%Y/%m/%d')
-            path = os.path.join(root_path, path_prefix)
+            path = os.path.join(cfg['root_path'], path_prefix)
             if os.path.exists(path):
-                path_backup(path, path_prefix, backup_path_prefix)
+                if cfg.get('backup_path_prefix'):
+                    path_backup(path, path_prefix, cfg['backup_path_prefix'])
                 print("Removing path: {}".format(path))
                 shutil.rmtree(path)
                 path_prefix = (last_week - datetime.timedelta(days=d)).strftime('%Y/%m')
-                path = os.path.join(root_path, path_prefix)
+                path = os.path.join(cfg['root_path'], path_prefix)
                 if len(glob.glob(path + '/*')) == 0:
                     os.rmdir(path)
                 path_prefix = (last_week - datetime.timedelta(days=d)).strftime('%Y')
-                path = os.path.join(root_path, path_prefix)
+                path = os.path.join(cfg['root_path'], path_prefix)
                 if len(glob.glob(path + '/*')) == 0:
                     os.rmdir(path)
