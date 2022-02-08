@@ -42,3 +42,10 @@ def update_rides_gtfs(**kwargs):
     """Update siri rides data with related gtfs data"""
     from .update_rides_gtfs import main
     main(**kwargs)
+
+
+@siri.command()
+def storage_backup_cleanup():
+    """Backup and cleanup SIRI storage"""
+    from .storage_backup_cleanup import main
+    main()
