@@ -53,3 +53,14 @@
           min_date: {}
           max_date: {}
           num_days: {default: "1"}
+
+- name: stride-etl-siri-storage-backup-cleanup
+  schedule_interval: "@daily"
+  description: |
+    Backup and cleanup siri storage
+  tasks:
+    - id: siri-storage-backup-cleanup
+      config:
+        type: cli
+        module: open_bus_stride_etl.siri.cli
+        function: storage_backup_cleanup
