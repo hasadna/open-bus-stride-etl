@@ -10,7 +10,7 @@ def main(session: db.Session, date):
     date = common.parse_date_str(date)
     print("Updating ride aggregations for date {}".format(date))
     stats = defaultdict(int)
-    for gtfs_ride in session.query(model.GtfsRide).join(model.GtfsRoute).where(model.GtfsRoute.date == date):
+    for gtfs_ride in session.query(model.GtfsRide).join(model.GtfsRoute.gtfs_rides).where(model.GtfsRoute.date == date):
         stats['total rides'] += 1
         gtfs_ride_stops = sorted(gtfs_ride.gtfs_ride_stops,
                                  key=lambda gtfs_ride_stop: gtfs_ride_stop.stop_sequence)
