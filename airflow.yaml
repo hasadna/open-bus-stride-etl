@@ -2,3 +2,4 @@ dag_files:
   - open_bus_stride_etl/stats/dags.yaml
   - open_bus_stride_etl/siri/dags.yaml
   - open_bus_stride_etl/gtfs/dags.yaml
+  - open_bus_stride_etl/db/dags.yaml

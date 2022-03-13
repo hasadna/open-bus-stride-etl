@@ -1,0 +1,9 @@
+- name: stride-etl-db-copy-backup-to-s3
+  description: |
+    Copy latest backup to dated path in S3
+  tasks:
+    - id: db-copy-backup-to-s3
+      config:
+        type: cli
+        module: open_bus_stride_etl.db.cli
+        function: copy_backup_to_s3
