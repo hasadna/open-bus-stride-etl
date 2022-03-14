@@ -66,12 +66,12 @@ def last_day_stats_iterator(session: Session, limit=5, from_=None):
                 ).count(),
             },
             'siri_ride_stop': {
-                'by_ride_scheduled_start_time': session.query(SiriRideStop).join(SiriRide.siri_ride_stops).filter(
+                'by_ride_scheduled_start_time': session.query(SiriRideStop).join(SiriRide, SiriRide.id==SiriRideStop.siri_ride_id).filter(
                     SiriRide.scheduled_start_time <= datetime_to, SiriRide.scheduled_start_time >= datetime_from
                 ).count(),
             },
             'siri_stop': {
-                'by_ride_stop_ride_scheduled_start_time': session.query(SiriStop).join(SiriRideStop.siri_stop).join(SiriRide.siri_ride_stops).filter(
+                'by_ride_stop_ride_scheduled_start_time': session.query(SiriStop).join(SiriRideStop, SiriRideStop.siri_stop_id==SiriStop.id).join(SiriRide, SiriRide.id==SiriRideStop.siri_ride_id).filter(
                     SiriRide.scheduled_start_time <= datetime_to, SiriRide.scheduled_start_time >= datetime_from
                 ).count(),
             }
