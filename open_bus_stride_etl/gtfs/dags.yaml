@@ -17,7 +17,7 @@
   tasks:
     - id: gtfs-update-ride-aggregations-date-range
       config:
-        type: cli
+        type: api
         module: open_bus_stride_etl.gtfs.update_ride_aggregations
         function: main
         kwargs:
