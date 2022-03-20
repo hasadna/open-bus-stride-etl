@@ -5,7 +5,21 @@
     - id: gtfs-update-ride-aggregations
       config:
         type: cli
-        module: open_bus_stride_etl.gtfs.cli
-        function: update_ride_aggregations
+        module: open_bus_stride_etl.gtfs.update_ride_aggregations
+        function: main
         kwargs:
           date: {}
+
+- name: stride-etl-gtfs-update-ride-aggregations-date-range
+  description: |
+    Manual update date range of aggregation data to gtfs rides
+    {"date": "2022-03-19", "date_to": "2022-03-15"}
+  tasks:
+    - id: gtfs-update-ride-aggregations-date-range
+      config:
+        type: cli
+        module: open_bus_stride_etl.gtfs.update_ride_aggregations
+        function: main
+        kwargs:
+          date: {}
+          date_to: {}
