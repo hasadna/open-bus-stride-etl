@@ -4,7 +4,7 @@
   tasks:
     - id: gtfs-update-ride-aggregations
       config:
-        type: cli
+        type: api
         module: open_bus_stride_etl.gtfs.update_ride_aggregations
         function: main
         kwargs:
