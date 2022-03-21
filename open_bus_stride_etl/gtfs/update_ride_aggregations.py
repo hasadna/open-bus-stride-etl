@@ -25,8 +25,7 @@ def _process_date_range(from_date, to_date):
 @db.session_decorator
 def _process_date(session: db.Session, date, silent=False):
     date = common.parse_date_str(date)
-    if not silent:
-        print("Updating ride aggregations for date {}".format(date))
+    print("Updating ride aggregations for date {}".format(date))
     stats = defaultdict(int)
     for gtfs_ride in session.query(model.GtfsRide).join(model.GtfsRoute.gtfs_rides).where(model.GtfsRoute.date == date):
         stats['total rides'] += 1
