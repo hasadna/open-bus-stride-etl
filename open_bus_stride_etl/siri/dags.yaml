@@ -2,6 +2,11 @@
   schedule_interval: "@hourly"
   description: |
     add siri ride durations
+  docs:
+    desc: |
+      Runs hourly, finds the first and last vehicle location of each ride and 
+      updates the following fields in DB: [[siri_ride.duration_minutes]],
+      [[siri_ride.first_vehicle_location_id]], [[siri_ride.last_vehicle_location_id]].
   tasks:
     - id: siri-add-ride-durations
       config:
@@ -13,6 +18,9 @@
   schedule_interval: "@hourly"
   description: |
     update siri ride-stops with gtfs data
+  docs:
+    desc: |
+      Runs hourly, tries to match SIRI stops with GTFS stops and updates the following field in DB: [[siri_ride_stop.gtfs_stop_id]].
   tasks:
     - id: siri-update-ride-stops-gtfs
       config:
@@ -28,6 +36,12 @@
   schedule_interval: "@hourly"
   description: |
     update siri ride-stops and vehicle locations
+  docs:
+    desc: |
+      Runs hourly, looks for siri ride stops which have a matching gtfs stop 
+      and uses the gtfs stop lon/lat to update the following fields in DB: 
+      [[siri_vehicle_location.distance_from_siri_ride_stop_meters]], 
+      [[siri_ride_stop.nearest_siri_vehicle_location_id]].
   tasks:
     - id: siri-update-ride-stops-vehicle-locations
       config:
@@ -43,6 +57,11 @@
   schedule_interval: "@hourly"
   description: |
     Update siri_ride with related gtfs_ride
+  docs:
+    desc: |
+      Runs hourly, looks for matching between siri rides and gtfs rides and updates
+      the following DB fields: [[siri_ride.route_gtfs_ride_id]], 
+      [[siri_ride.journey_gtfs_ride_id]], [[siri_ride.gtfs_ride_id]].
   tasks:
     - id: siri-update-rides-gtfs
       config:
@@ -58,6 +77,13 @@
   schedule_interval: "@daily"
   description: |
     Backup and cleanup siri storage
+  docs:
+    desc: |
+      Runs hourly, uploads raw SIRI data to S3 in the following format:
+      `https://openbus-stride-public.s3.eu-west-1.amazonaws.com/stride-siri-requester/year/month/day/hour/minute.br`
+      for example: 
+      https://openbus-stride-public.s3.eu-west-1.amazonaws.com/stride-siri-requester/2022/06/03/08/54.br
+      The file is compressed using brotli.
   tasks:
     - id: siri-storage-backup-cleanup
       config:
