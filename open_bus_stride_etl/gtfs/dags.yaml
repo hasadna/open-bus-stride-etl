@@ -1,6 +1,12 @@
 - name: stride-etl-gtfs-update-ride-aggregations
   description: |
     Update aggregation data to gtfs rides
+  docs:
+    desc: |
+      Triggered daily after [[gtfs-etl]] loads all the current day GTFS data to DB.
+      
+      It updates the following fields in DB: [[gtfs_ride.first_gtfs_ride_stop_id]], [[gtfs_ride.last_gtfs_ride_stop_id]], 
+      [[gtfs_ride.start_time]], [[gtfs_ride.end_time]].
   tasks:
     - id: gtfs-update-ride-aggregations
       config:
@@ -14,6 +20,8 @@
   description: |
     Manual update date range of aggregation data to gtfs rides
     {"date": "2022-03-19", "date_to": "2022-03-15"}
+  docs:
+    hide: true
   tasks:
     - id: gtfs-update-ride-aggregations-date-range
       config:
