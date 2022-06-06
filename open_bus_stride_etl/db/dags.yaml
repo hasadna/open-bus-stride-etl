@@ -1,6 +1,8 @@
 - name: stride-etl-db-copy-backup-to-s3
   description: |
     Copy latest backup to dated path in S3
+  docs:
+    hide: true
   tasks:
     - id: db-copy-backup-to-s3
       config:
