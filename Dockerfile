@@ -1,5 +1,5 @@
 # Pulled June 16, 2021
-FROM python:3.8@sha256:c7706b8d1b1e540b9dd42ac537498d7f3138e4b8b89fb890b2ee4d2c0bccc8ea
+FROM --platform=linux/amd64 python:3.8@sha256:c7706b8d1b1e540b9dd42ac537498d7f3138e4b8b89fb890b2ee4d2c0bccc8ea
 RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" &&\
     unzip awscliv2.zip && rm awscliv2.zip &&\
     ./aws/install && aws --version
