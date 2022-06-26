@@ -8,6 +8,8 @@
         "last_days_from": "2021-07-12",
         "validate": true
     }
+  docs:
+    hide: true
   tasks:
     - id: stats-collect
       config:
