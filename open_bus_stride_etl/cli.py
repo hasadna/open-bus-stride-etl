@@ -1,4 +1,5 @@
 import click
+import dotenv
 
 from .stats.cli import stats
 from .siri.cli import siri
@@ -7,8 +8,11 @@ from .db.cli import db
 
 
 @click.group(context_settings={'max_content_width': 200})
-def main():
+@click.option('--load-dotenv', is_flag=True)
+def main(load_dotenv):
     """Open Bus Stride Data Enrichment ETLs"""
+    if load_dotenv:
+        dotenv.load_dotenv()
     pass
 
 
@@ -16,3 +20,7 @@ main.add_command(stats)
 main.add_command(siri)
 main.add_command(gtfs)
 main.add_command(db)
+
+
+if __name__ == "__main__":
+    main()
