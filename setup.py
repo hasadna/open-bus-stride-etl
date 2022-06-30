@@ -13,6 +13,7 @@ setup(
     name='open-bus-stride-etl',
     version=version,
     packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
+    include_package_data=True,
     entry_points={
         'console_scripts': [
             'open-bus-stride-etl = open_bus_stride_etl.cli:main',
