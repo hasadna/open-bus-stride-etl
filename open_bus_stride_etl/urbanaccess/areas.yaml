@@ -1,0 +1,17 @@
+#
+# bbox: "min_lon, min_lat, max_lon, max_lat"
+# get it from https://boundingbox.klokantech.com/ - use csv export
+#
+# hours are in Israel timezone, inclusive, e.g. [8, 12] means 5 hours: 8, 9, 10, 11, 12
+#
+tel-aviv-center:
+  bbox: "34.753557,32.051585,34.804797,32.099295"
+  hours:
+    - [8, 12]
+    - [15, 19]
+
+rishon-lezion:
+  bbox: "34.729556,31.943054,34.834012,32.004068"
+  hours:
+    - [8, 12]
+    - [15, 19]

@@ -57,3 +57,8 @@ def print_memory_usage(start_msg, end_msg="Done"):
     print(start_msg)
     yield
     print("{}. Resident memory: {}mb".format(end_msg, psutil.Process().memory_info().rss / (1024 * 1024)))
+
+
+def israel_hour_to_utc_hour(hour):
+    hour = int(hour)
+    return pytz.timezone('Israel').localize(datetime.datetime.now().replace(hour=hour)).astimezone(pytz.utc).hour
