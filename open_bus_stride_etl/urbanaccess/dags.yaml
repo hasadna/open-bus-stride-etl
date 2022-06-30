@@ -1,0 +1,15 @@
+- name: stride-etl-urbanaccess-update-areas-fake-gtfs
+  schedule_interval: "@daily"
+  description: |
+    update urbanaccess areas fake gtfs data
+  docs:
+    desc: |
+      Runs daily, updates fake gtfs data for urbanaccess areas.
+      Makes sure there is daily fake gtfs data for each area for the last 30 days.
+      Data is avilable for download via the artifacts API method.
+  tasks:
+    - id: urbanaccess-update-areas-fake-gtfs
+      config:
+        type: api
+        module: open_bus_stride_etl.urbanaccess.update_areas_fake_gtfs
+        function: main

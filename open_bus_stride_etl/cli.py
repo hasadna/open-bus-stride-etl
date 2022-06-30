@@ -6,6 +6,7 @@ from .siri.cli import siri
 from .gtfs.cli import gtfs
 from .db.cli import db
 from .artifacts.cli import artifacts
+from .urbanaccess.cli import urbanaccess
 
 
 @click.group(context_settings={'max_content_width': 200})
@@ -22,6 +23,7 @@ main.add_command(siri)
 main.add_command(gtfs)
 main.add_command(db)
 main.add_command(artifacts)
+main.add_command(urbanaccess)
 
 
 if __name__ == "__main__":

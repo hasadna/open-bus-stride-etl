@@ -1,5 +1,10 @@
 -r ../open-bus-stride-db/requirements.txt
 -e ../open-bus-stride-db
 
+-r ../open-bus-stride-api/requirements.txt
+-e ../open-bus-stride-api
+
+-e ../open-bus-stride-client[all]
+
 -r requirements.txt
 -e .
