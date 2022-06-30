@@ -42,6 +42,7 @@ def upload_artifact(session, source_file_path, target_file_prefix, target_file_s
             error='',
             url='',
             created_at=common.now(),
+            file_size=os.path.getsize(source_file_path),
         )
         session.add(artifact)
         session.commit()
@@ -101,4 +102,5 @@ def iterate_artifacts(session, file_prefix, limit=None):
             'url': artifact.url,
             'created_at': artifact.created_at,
             'metadata': json.loads(artifact.metadata_json),
+            'file_size': artifact.file_size,
         }
