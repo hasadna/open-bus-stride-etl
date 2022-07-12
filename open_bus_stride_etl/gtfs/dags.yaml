@@ -1,6 +1,5 @@
 - name: stride-etl-gtfs-update-ride-aggregations
-  # only after running once with check_missing_dates, will set the schedule_interval
-  # schedule_interval: "@hourly"
+  schedule_interval: "@hourly"
   description: |
     Update aggregation data to gtfs rides
   docs:
@@ -17,4 +16,5 @@
         function: main
         kwargs:
           idempotent: {default: true}
-          check_missing_dates: {default: false}
+          # TODO: set check_missing_dates default to false once all missing dates were processed
+          check_missing_dates: {default: true}
