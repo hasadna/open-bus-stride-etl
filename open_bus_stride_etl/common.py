@@ -27,6 +27,13 @@ def is_None(val):
     return val is None or val == 'None'
 
 
+def parse_None(val):
+    if is_None(val):
+        return None
+    else:
+        return val
+
+
 def parse_date_str(date, num_days=None):
     """Parses a date string in format %Y-%m-%d with default of today if empty
     if num_days is not None - will use a default of today minus given num_days

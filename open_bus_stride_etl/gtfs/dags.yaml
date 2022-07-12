@@ -1,9 +1,11 @@
 - name: stride-etl-gtfs-update-ride-aggregations
+  # only after running once with check_missing_dates, will set the schedule_interval
+  # schedule_interval: "@hourly"
   description: |
     Update aggregation data to gtfs rides
   docs:
     desc: |
-      Triggered daily after [[gtfs-etl]] loads all the current day GTFS data to DB.
+      Idempotent task, runs hourly and verifies that the data is up to date.
       
       It updates the following fields in DB: [[gtfs_ride.first_gtfs_ride_stop_id]], [[gtfs_ride.last_gtfs_ride_stop_id]], 
       [[gtfs_ride.start_time]], [[gtfs_ride.end_time]].
@@ -14,20 +16,5 @@
         module: open_bus_stride_etl.gtfs.update_ride_aggregations
         function: main
         kwargs:
-          date: {}
-
-- name: stride-etl-gtfs-update-ride-aggregations-date-range
-  description: |
-    Manual update date range of aggregation data to gtfs rides
-    {"date": "2022-03-19", "date_to": "2022-03-15"}
-  docs:
-    hide: true
-  tasks:
-    - id: gtfs-update-ride-aggregations-date-range
-      config:
-        type: api
-        module: open_bus_stride_etl.gtfs.update_ride_aggregations
-        function: main
-        kwargs:
-          date: {}
-          date_to: {}
+          idempotent: {default: true}
+          check_missing_dates: {default: false}
