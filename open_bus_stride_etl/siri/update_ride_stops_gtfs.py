@@ -1,3 +1,4 @@
+import datetime
 from pprint import pprint
 from textwrap import dedent
 from collections import defaultdict
@@ -14,6 +15,8 @@ def main(min_date, max_date, num_days):
     min_date, max_date = parse_min_max_date_strs(min_date, max_date, num_days)
     print(f'min_date={min_date}')
     print(f'max_date={max_date}')
+    # the query is optimized only for a single day
+    assert (max_date - min_date) == datetime.timedelta(days=1)
     stats = defaultdict(int)
     for date, siri_route_ids in iterate_siri_route_id_dates(
         extra_from_sql='gtfs_stop, siri_stop, siri_ride_stop',
@@ -25,10 +28,9 @@ def main(min_date, max_date, num_days):
             and siri_ride.updated_duration_minutes is not null
             and siri_ride_stop.gtfs_stop_id is null
             and gtfs_stop.code = siri_stop.code
-            and gtfs_stop.date >= '{min_date}'
+            and gtfs_stop.date = '{min_date}'
             and siri_ride.scheduled_start_time >= '{min_date}'
-            and siri_ride.scheduled_start_time <= '{max_date}'
-            and gtfs_stop.date = date_trunc('day', siri_ride.scheduled_start_time)
+            and siri_ride.scheduled_start_time < '{max_date}'
         """).format(min_date=get_db_date_str(min_date), max_date=get_db_date_str(max_date))
     ):
         for siri_route_id in siri_route_ids:
