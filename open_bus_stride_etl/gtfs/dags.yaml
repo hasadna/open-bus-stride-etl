@@ -16,5 +16,4 @@
         function: main
         kwargs:
           idempotent: {default: true}
-          # TODO: set check_missing_dates default to false once all missing dates were processed
-          check_missing_dates: {default: true}
+          check_missing_dates: {default: false}
