@@ -17,7 +17,9 @@ from ..common import parse_siri_snapshot_id
 
 @session_decorator
 def siri_snapshots_iterator(session, limit):
-    for siri_snapshot in session.query(SiriSnapshot).order_by(desc(SiriSnapshot.etl_start_time))[:limit]:
+    for siri_snapshot in session.query(SiriSnapshot).filter(
+            SiriSnapshot.etl_status != SiriSnapshotEtlStatusEnum.pending,
+    ).order_by(desc(SiriSnapshot.etl_start_time))[:limit]:
         etl_status: SiriSnapshotEtlStatusEnum = siri_snapshot.etl_status
         yield {
             'snapshot_id': siri_snapshot.snapshot_id,
