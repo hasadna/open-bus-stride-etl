@@ -29,7 +29,7 @@ def is_file_exists(name):
 
 def upload_file(filename, key):
     get_s3().upload_file(filename, BUCKET_NAME, key)
-    return f'{ENDPOINT_URL}{key}'
+    return os.path.join(ENDPOINT_URL, BUCKET_NAME, key)
 
 
 def download_file(key, filename):
