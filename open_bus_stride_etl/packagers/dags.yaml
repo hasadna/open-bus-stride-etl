@@ -1,0 +1,10 @@
+- name: stride-etl-packagers-siri-update-package
+  schedule_interval: "@daily"
+  description: |
+    Collect SIRI data and save in storage
+  tasks:
+    - id: packagers-siri-update-package
+      config:
+        type: api
+        module: open_bus_stride_etl.packagers.siri
+        function: hourly_update_packages

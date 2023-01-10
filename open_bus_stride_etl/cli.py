@@ -7,6 +7,7 @@ from .gtfs.cli import gtfs
 from .db.cli import db
 from .artifacts.cli import artifacts
 from .urbanaccess.cli import urbanaccess
+from .packagers.cli import packagers
 
 
 @click.group(context_settings={'max_content_width': 200})
@@ -24,6 +25,7 @@ main.add_command(gtfs)
 main.add_command(db)
 main.add_command(artifacts)
 main.add_command(urbanaccess)
+main.add_command(packagers)
 
 
 if __name__ == "__main__":
