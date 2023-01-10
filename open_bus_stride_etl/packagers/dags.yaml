@@ -8,3 +8,15 @@
         type: api
         module: open_bus_stride_etl.packagers.siri
         function: hourly_update_packages
+
+- name: stride-etl-packagers-siri-create-legacy-packages-index
+  description: |
+    Create index of legacy packages and save in storage
+  docs:
+    hide: true
+  tasks:
+    - id: packagers-siri-create-legacy-packages-index
+      config:
+        type: api
+        module: open_bus_stride_etl.packagers.siri
+        function: create_legacy_packages_index

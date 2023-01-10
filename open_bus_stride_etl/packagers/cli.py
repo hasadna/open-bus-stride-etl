@@ -48,8 +48,14 @@ def siri_save_package(start_time, end_time, timedelta_units, timedelta_amount, o
 
 @packagers.command()
 @click.option('--verbose', is_flag=True)
-def siri_hourly_update_packages(verbose):
-    siri.hourly_update_packages(verbose=verbose)
+@click.option('--max-packages-per-type', type=int)
+@click.option('--start-date-hour', type=str)
+def siri_hourly_update_packages(**kwargs):
+    start_date_hour = kwargs.pop('start_date_hour', None)
+    if start_date_hour:
+        date, hour = start_date_hour.split(' ')
+        kwargs['start_datehour'] = pytz.timezone('israel').localize(datetime.datetime.strptime(date, '%Y-%m-%d').replace(hour=int(hour)))
+    siri.hourly_update_packages(**kwargs)
     print("OK")
 
 
@@ -64,3 +70,8 @@ def siri_update_package(date, hour, force_update, verbose):
     siri.update_package(stats, start_datetimehour, force_update, verbose)
     pprint(dict(stats))
     print("OK")
+
+
+@packagers.command()
+def siri_create_legacy_packages_index():
+    siri.create_legacy_packages_index()
