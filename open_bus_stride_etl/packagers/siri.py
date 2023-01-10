@@ -16,7 +16,7 @@ from open_bus_stride_db import db
 from .common import get_file_last_modified, upload_file, download_file, download_legacy_file, iterate_keys
 
 # can use this to force update after code changes
-FORCE_UPDATE_IF_FILE_LAST_MODIFIED_BEFORE = datetime.datetime(2023, 1, 10, 18, 0, 0, tzinfo=pytz.UTC)
+FORCE_UPDATE_IF_FILE_LAST_MODIFIED_BEFORE = pytz.timezone('israel').localize(datetime.datetime(2023, 1, 10, 20, 30))
 
 UPDATE_PACKAGE_RES_PACKAGE_EXISTS = 'package_exists'
 UPDATE_PACKAGE_RES_SAME_HASH = 'same_hash'
@@ -74,7 +74,7 @@ def get_row(row):
         if v is None:
             row[k] = ''
         elif isinstance(v, datetime.datetime):
-            row[k] = pytz.timezone('israel').localize(v).isoformat()
+            row[k] = v.replace(tzinfo=pytz.UTC).astimezone(pytz.timezone('israel')).isoformat()
         else:
             row[k] = str(v)
     return row
