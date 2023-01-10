@@ -148,7 +148,11 @@ def upload_package(tmpdir, package_path, base_filename, verbose=False):
     filename = os.path.join(tmpdir, f'{base_filename}.zip')
     if verbose:
         print(f"Uploading package file {filename} -> {package_path}")
-    upload_file(filename, package_path)
+    return upload_file(filename, package_path)
+
+
+UPDATE_PACKAGE_RES_PACKAGE_EXISTS = 'package_exists'
+UPDATE_PACKAGE_RES_SAME_HASH = 'same_hash'
 
 
 def update_package(stats, start_datetimehour: datetime.datetime, force_update=False, verbose=False):
@@ -166,12 +170,13 @@ def update_package(stats, start_datetimehour: datetime.datetime, force_update=Fa
             if verbose:
                 print(f'Package already exists: {package_path}')
             stats['package_skipped'] += 1
-            return
+            return UPDATE_PACKAGE_RES_PACKAGE_EXISTS
     else:
         if verbose:
             print(f'Package does not exist: {package_path}')
         stats['package_create'] += 1
-    print(f"Updating package {package_path} (force_update={force_update})")
+    if verbose:
+        print(f"Updating package {package_path} (force_update={force_update})")
     with tempfile.TemporaryDirectory() as tmpdir:
         save_package(stats, start_datetimehour, start_datetimehour + datetime.timedelta(hours=1), os.path.join(tmpdir, 'package'), verbose=verbose)
         if verbose:
@@ -184,8 +189,8 @@ def update_package(stats, start_datetimehour: datetime.datetime, force_update=Fa
                 if verbose:
                     print(f'Package hash is the same, skipping upload: {new_package_hash}')
                 stats['skipped_upload_packages'] += 1
-                return
-        upload_package(tmpdir, package_path, base_filename, verbose=verbose)
+                return UPDATE_PACKAGE_RES_SAME_HASH
+        return upload_package(tmpdir, package_path, base_filename, verbose=verbose)
 
 
 def hourly_update_packages(stats=None, verbose=False):
@@ -197,14 +202,16 @@ def hourly_update_packages(stats=None, verbose=False):
     print(f'Updating packages from {start_datehour} to {end_datehour} for up to 10 hours')
     current_datehour = start_datehour
     while current_datehour >= end_datehour and (datetime.datetime.now() - start_time).total_seconds() < 60 * 60 * 10:
-        if not (
-            current_datehour > start_datehour - datetime.timedelta(days=1)
-            or start_datehour - datetime.timedelta(days=10) < current_datehour < start_datehour - datetime.timedelta(days=9)
-        ):
-            current_datehour -= datetime.timedelta(hours=1)
-            continue
         force_update = current_datehour > (start_datehour - datetime.timedelta(days=5))
         print(f'{datetime.datetime.now()} Updating package: {current_datehour} (force_update={force_update})')
-        update_package(stats, current_datehour, force_update, verbose)
+        update_package_res = update_package(stats, current_datehour, force_update, verbose)
+        if update_package_res == UPDATE_PACKAGE_RES_PACKAGE_EXISTS:
+            pass
+        else:
+            stats_str = ','.join([f'{k}={stats[k]}' for k in sorted(stats.keys())])
+            if update_package_res == UPDATE_PACKAGE_RES_SAME_HASH:
+                print(f'No change ({stats_str})')
+            else:
+                print(f'Uploaded ({stats_str}): {update_package_res}')
         current_datehour -= datetime.timedelta(hours=1)
     pprint(dict(stats))
