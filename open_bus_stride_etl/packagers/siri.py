@@ -1,17 +1,19 @@
 import os
 import json
 import shutil
+import zipfile
 import datetime
 import tempfile
 from pprint import pprint
 from textwrap import dedent
+from collections import defaultdict
 
 import pytz
 import dataflows as DF
 
 from ..common import now
 from open_bus_stride_db import db
-from .common import is_file_exists
+from .common import is_file_exists, upload_file, download_file
 
 
 SQL_TEMPLATE = dedent('''
@@ -78,8 +80,10 @@ def db_date(dt):
     return dt.astimezone(pytz.UTC).replace(tzinfo=None).strftime('%Y-%m-%d')
 
 
-def sql_iterator(stats, min_time: datetime.datetime, max_time: datetime.datetime):
-    print(f'iterating over sql from {min_time} to {max_time}')
+def sql_iterator(stats, min_time: datetime.datetime, max_time: datetime.datetime, verbose=False):
+    start_time = now()
+    if verbose:
+        print(f'{start_time} iterating over sql from {min_time} to {max_time}')
     sql = SQL_TEMPLATE.format(
         min_date_utc=db_date(min_time - datetime.timedelta(days=2)),
         max_date_utc=db_date(max_time + datetime.timedelta(days=2)),
@@ -88,8 +92,12 @@ def sql_iterator(stats, min_time: datetime.datetime, max_time: datetime.datetime
     )
     with db.get_session() as session:
         for sql_row in session.execute(sql, execution_options={'stream_results': True}):
-            yield get_row(dict(sql_row))
             stats['rows'] += 1
+            if verbose and stats['rows'] == 1:
+                print(f'{(now()-start_time).total_seconds()}s: got first row from DB')
+            yield get_row(dict(sql_row))
+    if verbose:
+        print(f'{(now() - start_time).total_seconds()}s: finished processing last row from DB ({stats["rows"]} rows)')
 
 
 def sql_iterator_timedelta(stats, start_time: datetime.datetime, timedelta_units, timedelta_amount):
@@ -111,56 +119,92 @@ def save_package_timedelta(stats, start_time, timedelta_units, timedelta_amount,
     ).process()
 
 
-def save_package(stats, start_time, end_time, output_path):
-    print(f'Packaging siri data {start_time} -> {end_time} -> {output_path}')
+def save_package(stats, start_time, end_time, output_path, verbose=False):
+    if verbose:
+        print(f'Packaging siri data {start_time} -> {end_time} -> {output_path}')
     DF.Flow(
-        sql_iterator(stats, start_time, end_time),
+        sql_iterator(stats, start_time, end_time, verbose),
         DF.dump_to_path(output_path),
     ).process()
 
 
-def get_existing_package_hash(package_path):
-    print(f'Getting existing package hash {package_path}')
-    raise NotImplementedError()
+def get_existing_package_hash(package_path, base_filename):
+    print(f'Getting existing package hash {package_path} ({base_filename})')
+    with tempfile.TemporaryDirectory() as temp_dir:
+        filename = os.path.join(temp_dir, 'package.zip')
+        download_file(package_path, filename)
+        with zipfile.ZipFile(filename, 'r') as zf:
+            with zf.open(f'{base_filename}-metadata.json') as f:
+                return json.load(f)['hash']
 
 
-def upload_package(tmpdir, package_path, base_filename):
-    print(f"Uploading package {tmpdir} -> {package_path}")
+def upload_package(tmpdir, package_path, base_filename, verbose=False):
+    if verbose:
+        print(f"Uploading package {tmpdir} -> {package_path}")
+        print(f'Creating package file...')
     os.rename(os.path.join(tmpdir, 'package', 'res_1.csv'), os.path.join(tmpdir, 'package', f'{base_filename}.csv'))
     os.rename(os.path.join(tmpdir, 'package', 'datapackage.json'), os.path.join(tmpdir, 'package', f'{base_filename}-metadata.json'))
     shutil.make_archive(os.path.join(tmpdir, base_filename), 'zip', os.path.join(tmpdir, 'package'))
     filename = os.path.join(tmpdir, f'{base_filename}.zip')
+    if verbose:
+        print(f"Uploading package file {filename} -> {package_path}")
+    upload_file(filename, package_path)
 
 
-
-def update_package(stats, date, force_update=False):
+def update_package(stats, start_datetimehour: datetime.datetime, force_update=False, verbose=False):
+    assert start_datetimehour.minute == 0 and start_datetimehour.second == 0 and start_datetimehour.microsecond == 0
     stats['all_packages'] += 1
-    if force_update:
-        stats['forced_update_packages'] += 1
-    package_path = date.strftime('stride-etl-packages/siri/%Y/%m/%Y-%m-%d.zip')
+    base_filename = start_datetimehour.strftime('%Y-%m-%d.%H')
+    package_path = start_datetimehour.strftime('stride-etl-packages/siri/%Y/%m/') + base_filename + '.zip'
     package_exists = is_file_exists(package_path)
-    if package_exists and not force_update:
-        stats['skipped_packages'] += 1
-        return
+    if package_exists:
+        if force_update:
+            if verbose:
+                print(f'Package exists, but forcing update: {package_path}')
+            stats['package_forced_update'] += 1
+        else:
+            if verbose:
+                print(f'Package already exists: {package_path}')
+            stats['package_skipped'] += 1
+            return
+    else:
+        if verbose:
+            print(f'Package does not exist: {package_path}')
+        stats['package_create'] += 1
     print(f"Updating package {package_path} (force_update={force_update})")
     with tempfile.TemporaryDirectory() as tmpdir:
-        save_package(stats, date, date + datetime.timedelta(minutes=5), os.path.join(tmpdir, 'package'))
-        pprint(dict(stats))
+        save_package(stats, start_datetimehour, start_datetimehour + datetime.timedelta(hours=1), os.path.join(tmpdir, 'package'), verbose=verbose)
+        if verbose:
+            pprint(dict(stats))
         if package_exists:
             with open(os.path.join(tmpdir, 'package', 'datapackage.json')) as f:
                 new_package_hash = json.load(f)['hash']
-            existing_package_hash = get_existing_package_hash(package_path)
+            existing_package_hash = get_existing_package_hash(package_path, base_filename)
             if new_package_hash == existing_package_hash:
+                if verbose:
+                    print(f'Package hash is the same, skipping upload: {new_package_hash}')
                 stats['skipped_upload_packages'] += 1
                 return
-        upload_package(tmpdir, package_path, date.strftime('%Y-%m-%d'))
+        upload_package(tmpdir, package_path, base_filename, verbose=verbose)
 
 
-def daily_update_packages(stats):
-    start_date = datetime.datetime(2022, 3, 15).astimezone(pytz.timezone('israel'))
-    end_date = now().replace(hour=0, minute=0, second=0, microsecond=0).astimezone(pytz.timezone('israel'))
-    print(f'Updating packages from {end_date} to {start_date}')
-    date = end_date
-    while date >= start_date:
-        update_package(stats, date, date > (end_date - datetime.timedelta(days=5)))
-        date -= datetime.timedelta(days=1)
+def hourly_update_packages(stats=None, verbose=False):
+    if stats is None:
+        stats = defaultdict(int)
+    start_time = datetime.datetime.now()
+    start_datehour = now().replace(minute=0, second=0, microsecond=0).astimezone(pytz.timezone('israel'))
+    end_datehour = datetime.datetime(2022, 3, 15, 0).astimezone(pytz.timezone('israel'))
+    print(f'Updating packages from {start_datehour} to {end_datehour} for up to 10 hours')
+    current_datehour = start_datehour
+    while current_datehour >= end_datehour and (datetime.datetime.now() - start_time).total_seconds() < 60 * 60 * 10:
+        if not (
+            current_datehour > start_datehour - datetime.timedelta(days=1)
+            or start_datehour - datetime.timedelta(days=10) < current_datehour < start_datehour - datetime.timedelta(days=9)
+        ):
+            current_datehour -= datetime.timedelta(hours=1)
+            continue
+        force_update = current_datehour > (start_datehour - datetime.timedelta(days=5))
+        print(f'{datetime.datetime.now()} Updating package: {current_datehour} (force_update={force_update})')
+        update_package(stats, current_datehour, force_update, verbose)
+        current_datehour -= datetime.timedelta(hours=1)
+    pprint(dict(stats))

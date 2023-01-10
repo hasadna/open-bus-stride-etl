@@ -47,19 +47,20 @@ def siri_save_package(start_time, end_time, timedelta_units, timedelta_amount, o
 
 
 @packagers.command()
-def siri_daily_update_packages():
-    stats = defaultdict(int)
-    siri.daily_update_packages(stats)
-    pprint(dict(stats))
+@click.option('--verbose', is_flag=True)
+def siri_hourly_update_packages(verbose):
+    siri.hourly_update_packages(verbose=verbose)
     print("OK")
 
 
 @packagers.command()
 @click.argument('DATE', type=str)
+@click.argument('HOUR', type=int)
 @click.option('--force-update', is_flag=True)
-def siri_update_package(date, force_update):
+@click.option('--verbose', is_flag=True)
+def siri_update_package(date, hour, force_update, verbose):
     stats = defaultdict(int)
-    date = datetime.datetime.combine(parse_date_str(date), datetime.datetime.min.time())
-    siri.update_package(stats, date, force_update)
+    start_datetimehour = datetime.datetime.combine(parse_date_str(date), datetime.datetime.min.time().replace(hour=hour))
+    siri.update_package(stats, start_datetimehour, force_update, verbose)
     pprint(dict(stats))
     print("OK")

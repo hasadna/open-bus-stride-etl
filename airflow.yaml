@@ -4,3 +4,4 @@ dag_files:
   - open_bus_stride_etl/gtfs/dags.yaml
   - open_bus_stride_etl/db/dags.yaml
   - open_bus_stride_etl/urbanaccess/dags.yaml
+  - open_bus_stride_etl/packagers/dags.yaml

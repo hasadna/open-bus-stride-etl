@@ -25,3 +25,11 @@ def is_file_exists(name):
         else:
             raise
     return True
+
+
+def upload_file(filename, key):
+    get_s3().upload_file(filename, BUCKET_NAME, key)
+
+
+def download_file(key, filename):
+    get_s3().download_file(BUCKET_NAME, key, filename)
