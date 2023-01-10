@@ -331,8 +331,6 @@ def legacy_get_datetime_field(row, date_fields=None, time_fields=None):
 
 def iterate_legacy_packages_index():
     for keynum, key in enumerate(iterate_keys('obus-do1', 'SiriForSplunk')):
-        if keynum+1 > 2:
-            break
         print(f'Processing key {keynum+1}: {key}')
         max_recorded_at_time = None
         min_recorded_at_time = None
@@ -342,7 +340,7 @@ def iterate_legacy_packages_index():
             filename = os.path.join(tmpdir, 'legacy.csv.gz')
             download_legacy_file('obus-do1', key, filename)
             for res in DF.Flow(
-                    DF.load(filename, cast_strategy=DF.load.CAST_TO_STRINGS, infer_strategy=DF.load.INFER_STRINGS)
+                DF.load(filename, cast_strategy=DF.load.CAST_TO_STRINGS, infer_strategy=DF.load.INFER_STRINGS, encoding='utf-8')
             ).datastream().res_iter.get_iterator():
                 for i, row in enumerate(res):
                     num_rows += 1
