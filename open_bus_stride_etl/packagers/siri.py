@@ -4,6 +4,7 @@ import shutil
 import zipfile
 import datetime
 import tempfile
+import traceback
 from pprint import pprint
 from textwrap import dedent
 from collections import defaultdict
@@ -269,29 +270,32 @@ def legacy_get_datetime_field(row, date_fields=None, time_fields=None):
     return pytz.timezone('israel').localize(datetime.datetime.strptime(f'{date_value} {time_value}', '%Y-%m-%d %H:%M:%S')).isoformat()
 
 
-# def legacy_get_siri_journey_ref(date, service_id):
-#     service_id = service_id.strip() or '0'
-#     return f'{date}-{service_id}'
+def legacy_get_siri_journey_ref(date, service_id):
+    service_id = service_id.strip() or '0'
+    return f'{date}-{service_id}'
 
 
-# def legacy_process_row(key, i, row):
-#     return {
-#         'id': f'{key}_{i}',
-#         'lat': row['lat'],
-#         'lon': row['lon'],
-#         'recorded_at_time': legacy_get_datetime_field(row, ['date_recorded', 'date'], ['time_recorded']),
-#         'siri_scheduled_start_time': legacy_get_datetime_field(row, ['planned_start_date', 'date'], ['planned_start_time']),
-#         'siri_journey_ref': legacy_get_siri_journey_ref(row['date'], row.get('service_id')),
-#         'siri_vehicle_ref': row['bus_id'],
-#         'siri_stop_code': row.get('stop_point_ref'),
-#         'siri_operator_ref': row['agency_id'],
-#         'siri_line_ref': row['route_id'],
-#         'siri_snapshot_id': key,
-#         'gtfs_route_short_name': row['route_short_name'],
-#         'predicted_end_time': legacy_get_datetime_field(row, ['predicted_end_date', 'date'], ['predicted_end_time']),
-#         'date': row['date'],
-#         'num_duplicates': row.get('num_duplicates') or '',
-#     }
+def legacy_process_row(key, i, row, with_recorded_at_time=True):
+    return {
+        'id': f'{key}_{i}',
+        'lat': row['lat'],
+        'lon': row['lon'],
+        **(
+            {'recorded_at_time': legacy_get_datetime_field(row, ['date_recorded', 'date'], ['time_recorded'])}
+            if with_recorded_at_time else {}
+        ),
+        'siri_scheduled_start_time': legacy_get_datetime_field(row, ['planned_start_date', 'date'], ['planned_start_time']),
+        'siri_journey_ref': legacy_get_siri_journey_ref(row['date'], row.get('service_id')),
+        'siri_vehicle_ref': row['bus_id'],
+        'siri_stop_code': row.get('stop_point_ref'),
+        'siri_operator_ref': row['agency_id'],
+        'siri_line_ref': row['route_id'],
+        'siri_snapshot_id': key,
+        'gtfs_route_short_name': row['route_short_name'],
+        'predicted_end_time': legacy_get_datetime_field(row, ['predicted_end_date', 'date'], ['predicted_end_time']),
+        'date': row['date'],
+        'num_duplicates': row.get('num_duplicates') or '',
+    }
 
 
 # def legacy_package_iterator(key, filename):
@@ -335,25 +339,52 @@ def iterate_legacy_packages_index():
         max_recorded_at_time = None
         min_recorded_at_time = None
         num_rows = 0
-        assert key.endswith('.csv.gz')
-        with tempfile.TemporaryDirectory() as tmpdir:
-            filename = os.path.join(tmpdir, 'legacy.csv.gz')
-            download_legacy_file('obus-do1', key, filename)
-            for res in DF.Flow(
-                DF.load(filename, cast_strategy=DF.load.CAST_TO_STRINGS, infer_strategy=DF.load.INFER_STRINGS, encoding='utf-8')
-            ).datastream().res_iter.get_iterator():
-                for i, row in enumerate(res):
-                    num_rows += 1
-                    recorded_at_time = legacy_get_datetime_field(row, ['date_recorded', 'date'], ['time_recorded'])
-                    if not max_recorded_at_time or recorded_at_time > max_recorded_at_time:
-                        max_recorded_at_time = recorded_at_time
-                    if not min_recorded_at_time or recorded_at_time < min_recorded_at_time:
-                        min_recorded_at_time = recorded_at_time
+        num_recorded_at_time_exceptions = 0
+        num_row_processing_exceptions = 0
+        key_processing_error = False
+        # noinspection PyBroadException
+        try:
+            assert key.endswith('.csv.gz')
+            with tempfile.TemporaryDirectory() as tmpdir:
+                filename = os.path.join(tmpdir, 'legacy.csv.gz')
+                download_legacy_file('obus-do1', key, filename)
+                for res in DF.Flow(
+                    DF.load(filename, cast_strategy=DF.load.CAST_TO_STRINGS, infer_strategy=DF.load.INFER_STRINGS, encoding='utf-8')
+                ).datastream().res_iter.get_iterator():
+                    for i, row in enumerate(res):
+                        num_rows += 1
+                        # noinspection PyBroadException
+                        try:
+                            legacy_process_row(key, i, row, with_recorded_at_time=False)
+                        except Exception:
+                            traceback.print_exc()
+                            print(f'Error legacy processing row {i}: {row}')
+                            num_row_processing_exceptions += 1
+                        recorded_at_time = None
+                        # noinspection PyBroadException
+                        try:
+                            recorded_at_time = legacy_get_datetime_field(row, ['date_recorded', 'date'], ['time_recorded'])
+                        except Exception:
+                            traceback.print_exc()
+                            print(f'Error getting recorded_at_time for row {i}: {row}')
+                            num_recorded_at_time_exceptions += 1
+                        if recorded_at_time:
+                            if not max_recorded_at_time or recorded_at_time > max_recorded_at_time:
+                                max_recorded_at_time = recorded_at_time
+                            if not min_recorded_at_time or recorded_at_time < min_recorded_at_time:
+                                min_recorded_at_time = recorded_at_time
+        except Exception:
+            traceback.print_exc()
+            print(f'Error processing key')
+            key_processing_error = True
         yield {
             'key': key,
             'num_rows': num_rows,
             'max_recorded_at_time': max_recorded_at_time,
             'min_recorded_at_time': min_recorded_at_time,
+            'num_recorded_at_time_exceptions': num_recorded_at_time_exceptions,
+            'num_row_processing_exceptions': num_row_processing_exceptions,
+            'key_processing_error': key_processing_error,
         }
 
 
