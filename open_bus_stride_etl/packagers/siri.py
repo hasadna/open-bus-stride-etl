@@ -23,8 +23,6 @@ UPDATE_PACKAGE_RES_PACKAGE_EXISTS = 'package_exists'
 UPDATE_PACKAGE_RES_SAME_HASH = 'same_hash'
 UPDATE_PACKAGE_RES_LEGACY_NOT_EXISTS = 'legacy_not_exists'
 STRIDE_FIRST_DATETIME = datetime.datetime(2022, 3, 15, 0).astimezone(pytz.timezone('israel'))
-LEGACY_FIRST_DATETIME = datetime.datetime(2019, 3, 4, 0).astimezone(pytz.timezone('israel'))
-LEGACY_LAST_DATETIME = datetime.datetime(2021, 8, 9, 0).astimezone(pytz.timezone('israel'))
 SQL_TEMPLATE = dedent('''
     select
         svl.id,
@@ -211,45 +209,33 @@ def hourly_update_packages(stats=None, verbose=False, max_packages_per_type=None
     if not start_datehour:
         start_datehour = now().replace(minute=0, second=0, microsecond=0).astimezone(pytz.timezone('israel'))
     end_datehour = STRIDE_FIRST_DATETIME
-    # end_datehour = LEGACY_FIRST_DATETIME
     print(f'Updating packages from {start_datehour} to {end_datehour} for up to 10 hours')
     current_datehour = start_datehour + datetime.timedelta(hours=1)
-    num_is_stride_force, num_is_stride, num_is_legacy = 0, 0, 0
+    num_is_stride_force, num_is_stride = 0, 0
     while current_datehour >= end_datehour and (datetime.datetime.now() - start_time).total_seconds() < 60 * 60 * 10:
         current_datehour -= datetime.timedelta(hours=1)
-        is_stride = current_datehour >= STRIDE_FIRST_DATETIME
-        is_legacy = current_datehour <= LEGACY_LAST_DATETIME
-        if is_stride or is_legacy:
-            force_update = current_datehour > (start_datehour - datetime.timedelta(days=5))
-            if max_packages_per_type not in [None, 'None', 0, '0']:
-                max_packages_per_type = int(max_packages_per_type)
-                if (
-                    (is_stride and force_update and num_is_stride_force >= max_packages_per_type)
-                    or (is_stride and not force_update and num_is_stride >= max_packages_per_type)
-                    or (is_legacy and num_is_legacy >= max_packages_per_type)
-                ):
-                    continue
-            print(f'{datetime.datetime.now()} Updating package: {current_datehour} (force_update={force_update},is_stride={is_stride},is_legacy={is_legacy})')
-            if is_stride:
-                update_package_res = update_package(stats, current_datehour, force_update, verbose)
+        force_update = current_datehour > (start_datehour - datetime.timedelta(days=5))
+        if max_packages_per_type not in [None, 'None', 0, '0']:
+            max_packages_per_type = int(max_packages_per_type)
+            if (
+                (force_update and num_is_stride_force >= max_packages_per_type)
+                or (not force_update and num_is_stride >= max_packages_per_type)
+            ):
+                continue
+        print(f'{datetime.datetime.now()} Updating package: {current_datehour} (force_update={force_update})')
+        update_package_res = update_package(stats, current_datehour, force_update, verbose)
+        if update_package_res in [UPDATE_PACKAGE_RES_PACKAGE_EXISTS, UPDATE_PACKAGE_RES_LEGACY_NOT_EXISTS]:
+            pass
+        else:
+            stats_str = ','.join([f'{k}={stats[k]}' for k in sorted(stats.keys())])
+            if update_package_res == UPDATE_PACKAGE_RES_SAME_HASH:
+                print(f'No change ({stats_str})')
             else:
-                raise Exception('Legacy packages are not supported')
-                # assert is_legacy
-                # update_package_res = update_package_legacy(stats, current_datehour, verbose)
-            if update_package_res in [UPDATE_PACKAGE_RES_PACKAGE_EXISTS, UPDATE_PACKAGE_RES_LEGACY_NOT_EXISTS]:
-                pass
-            else:
-                stats_str = ','.join([f'{k}={stats[k]}' for k in sorted(stats.keys())])
-                if update_package_res == UPDATE_PACKAGE_RES_SAME_HASH:
-                    print(f'No change ({stats_str})')
-                else:
-                    print(f'Uploaded ({stats_str}): {update_package_res}')
-            if is_stride and force_update:
-                num_is_stride_force += 1
-            elif is_stride:
-                num_is_stride += 1
-            elif is_legacy:
-                num_is_legacy += 1
+                print(f'Uploaded ({stats_str}): {update_package_res}')
+        if force_update:
+            num_is_stride_force += 1
+        else:
+            num_is_stride += 1
     pprint(dict(stats))
 
 
@@ -298,43 +284,9 @@ def legacy_process_row(key, i, row, with_recorded_at_time=True):
     }
 
 
-# def legacy_package_iterator(key, filename):
-#     for res in DF.Flow(
-#             DF.load(filename, cast_strategy=DF.load.CAST_TO_STRINGS, infer_strategy=DF.load.INFER_STRINGS)
-#     ).datastream().res_iter.get_iterator():
-#         for i, row in enumerate(res):
-#             yield legacy_process_row(key, i, row)
-
-
-# def update_package_legacy(stats, current_datehour, verbose):
-#     key = current_datehour.strftime("%Y-%m-%d.%-H")
-#     if verbose:
-#         print(f'update_package_legacy({current_datehour})')
-#     with tempfile.TemporaryDirectory() as tmpdir:
-#         filename = os.path.join(tmpdir, 'legacy.csv.gz')
-#         bucket = 'obus-do1'
-#         file_key = f'SiriForSplunk/{current_datehour.strftime("%Y/%m/%d")}/siri_rt_data_v2.{key}.csv.gz'
-#         if download_legacy_file(bucket, file_key, filename):
-#             output_path = os.path.join(tmpdir, 'package')
-#             if verbose:
-#                 print(f'Packaging siri data {file_key} -> {output_path}')
-#             DF.Flow(
-#                 legacy_package_iterator(key, filename),
-#                 DF.dump_to_path(output_path)
-#             ).process()
-#             if verbose:
-#                 pprint(dict(stats))
-#             base_filename = current_datehour.strftime('%Y-%m-%d.%H')
-#             package_path = current_datehour.strftime('stride-etl-packages/siri/%Y/%m/') + base_filename + '.zip'
-#             return upload_package(tmpdir, package_path, base_filename, verbose=verbose)
-#         else:
-#             if verbose:
-#                 print("Legacy package does not exist")
-#             return UPDATE_PACKAGE_RES_LEGACY_NOT_EXISTS
-
-
-def iterate_legacy_packages_index():
-    for keynum, key in enumerate(iterate_keys('obus-do1', 'SiriForSplunk')):
+def iterate_legacy_packages_index(only_keys=None):
+    keys_iterator = only_keys if only_keys else iterate_keys('obus-do1', 'SiriForSplunk')
+    for keynum, key in enumerate(keys_iterator):
         print(f'Processing key {keynum+1}: {key}')
         max_recorded_at_time = None
         min_recorded_at_time = None
@@ -388,11 +340,138 @@ def iterate_legacy_packages_index():
         }
 
 
-def create_legacy_packages_index():
+def create_legacy_packages_index(only_keys=None, dump_to_path=False):
+    if only_keys is not None:
+        only_keys = [k.strip() for k in only_keys.split(',') if k.strip()]
+        if not only_keys:
+            only_keys = None
+    print(f'create_legacy_packages_index(only_keys={only_keys}, dump_to_path={dump_to_path})')
     with tempfile.TemporaryDirectory() as tmpdir:
+        output_path = os.path.join('.data', 'legacy_packages_index') if dump_to_path else os.path.join(tmpdir, 'package')
         DF.Flow(
-            iterate_legacy_packages_index(),
+            iterate_legacy_packages_index(only_keys),
             DF.printer(),
-            DF.dump_to_path(os.path.join(tmpdir, 'package'))
+            DF.dump_to_path(output_path)
         ).process()
-        upload_package(tmpdir, 'stride-etl-packages/siri/legacy-packages-index.zip', 'legacy-packages-index')
+        if not dump_to_path:
+            upload_package(tmpdir, 'stride-etl-packages/siri/legacy-packages-index.zip', 'legacy-packages-index')
+
+
+def legacy_update_package_hour(hour, min_recorded_at_times):
+    num_row_errors = 0
+    num_keys = 0
+    num_rows = 0
+    num_hour_rows = 0
+    got_exception = False
+    url = ''
+    already_exists = False
+    base_filename = hour.strftime('%Y-%m-%d.%H')
+    package_path = hour.strftime('stride-etl-packages/siri/%Y/%m/') + base_filename + '.zip'
+    if get_file_last_modified(package_path) is None:
+        print(f'legacy_update_package_hour: {hour}')
+        all_keys = set()
+        for max_recorded_at_times in min_recorded_at_times.values():
+            for keys in max_recorded_at_times.values():
+                all_keys.update(keys)
+        # noinspection PyBroadException
+        try:
+            all_rows_by_time = {}
+            for key in all_keys:
+                num_keys += 1
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    download_legacy_file('obus-do1', key, os.path.join(tmpdir, 'legacy.csv.gz'))
+                    for res in DF.Flow(
+                        DF.load(os.path.join(tmpdir, 'legacy.csv.gz'), cast_strategy=DF.load.CAST_TO_STRINGS, infer_strategy=DF.load.INFER_STRINGS, encoding='utf-8'),
+                    ).datastream().res_iter.get_iterator():
+                        for i, row in enumerate(res):
+                            num_rows += 1
+                            outrow = None
+                            # noinspection PyBroadException
+                            try:
+                                outrow = legacy_process_row(key, i, row)
+                            except Exception:
+                                num_row_errors += 1
+                                traceback.print_exc()
+                                print(f'Error legacy processing row {i}: {row}')
+                            if outrow:
+                                recorded_at_time = datetime.datetime.fromisoformat(outrow['recorded_at_time'])
+                                if hour <= recorded_at_time < hour + datetime.timedelta(hours=1):
+                                    if recorded_at_time not in all_rows_by_time:
+                                        all_rows_by_time[recorded_at_time] = []
+                                    all_rows_by_time[recorded_at_time].append({
+                                        k: v for k, v in outrow.items() if k != 'recorded_at_time'
+                                    })
+
+            def iterator():
+                for recorded_at_time in sorted(all_rows_by_time.keys()):
+                    for row in all_rows_by_time[recorded_at_time]:
+                        yield {
+                            'recorded_at_time': recorded_at_time.isoformat(),
+                            **row,
+                        }
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                DF.Flow(
+                    iterator(),
+                    DF.dump_to_path(os.path.join(tmpdir, 'package'))
+                ).process()
+                url = upload_package(tmpdir, package_path, base_filename)
+        except Exception:
+            traceback.print_exc()
+            got_exception = True
+    else:
+        already_exists = True
+    return {
+        'hour': hour,
+        'num_row_errors': num_row_errors,
+        'num_keys': num_keys,
+        'num_rows': num_rows,
+        'num_hour_rows': num_hour_rows,
+        'got_exception': got_exception,
+        'url': url,
+        'already_exists': already_exists,
+    }
+
+
+def legacy_update_packages_from_index(index_from_path=False):
+    hour_keys = {}
+    num_keys = 0
+    with tempfile.TemporaryDirectory() as tmpdir:
+        if index_from_path:
+            index_path = os.path.join('.data', 'legacy_packages_index', 'datapackage.json')
+            report_path = os.path.join('.data', 'siri_legacy_packages_report')
+        else:
+            raise NotImplementedError()
+            # index_zipfilename = os.path.join(tmpdir, 'index.zip')
+            # download_file('stride-etl-packages/siri/legacy-packages-index.zip', index_zipfilename)
+            # # extract zip file
+            # with zipfile.ZipFile(index_zipfilename, 'r') as zip_ref:
+            #     zip_ref.extractall(tmpdir)
+        for res in DF.Flow(
+            DF.load(index_path),
+            DF.printer()
+        ).datastream().res_iter.get_iterator():
+            for row in res:
+                if row['key_processing_error']:
+                    continue
+                num_keys += 1
+                min_recorded_at_time = datetime.datetime.fromisoformat(row['min_recorded_at_time'])
+                max_recorded_at_time = datetime.datetime.fromisoformat(row['max_recorded_at_time'])
+                current_hour = min_recorded_at_time.replace(minute=0, second=0, microsecond=0) - datetime.timedelta(hours=1)
+                end_hour = max_recorded_at_time.replace(minute=0, second=0, microsecond=0) - datetime.timedelta(hours=1)
+                while current_hour <= end_hour:
+                    current_hour += datetime.timedelta(hours=1)
+                    if current_hour not in hour_keys:
+                        hour_keys[current_hour] = {}
+                    if min_recorded_at_time not in hour_keys[current_hour]:
+                        hour_keys[current_hour][min_recorded_at_time] = {}
+                    if max_recorded_at_time not in hour_keys[current_hour][min_recorded_at_time]:
+                        hour_keys[current_hour][min_recorded_at_time][max_recorded_at_time] = []
+                    hour_keys[current_hour][min_recorded_at_time][max_recorded_at_time].append(row['key'])
+                    break
+                break
+        print(f'Processing {num_keys} keys')
+        DF.Flow(
+            (legacy_update_package_hour(hour, hour_keys[hour]) for hour in sorted(hour_keys.keys())),
+            DF.dump_to_path(report_path)
+        ).process()

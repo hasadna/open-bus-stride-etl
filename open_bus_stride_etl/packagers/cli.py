@@ -73,5 +73,13 @@ def siri_update_package(date, hour, force_update, verbose):
 
 
 @packagers.command()
-def siri_create_legacy_packages_index():
-    siri.create_legacy_packages_index()
+@click.option('--only-keys', type=str)
+@click.option('--dump-to-path', is_flag=True)
+def siri_create_legacy_packages_index(**kwargs):
+    siri.create_legacy_packages_index(**kwargs)
+
+
+@packagers.command()
+@click.option('--index-from-path', is_flag=True)
+def siri_legacy_update_packages_from_index(**kwargs):
+    siri.legacy_update_packages_from_index(**kwargs)
