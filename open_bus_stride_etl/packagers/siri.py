@@ -285,8 +285,28 @@ def legacy_process_row(key, i, row, with_recorded_at_time=True):
 
 
 def iterate_legacy_packages_index(only_keys=None):
+    existing_keys = {}
+    with tempfile.TemporaryDirectory() as tmpdir:
+        zip_path = os.path.join(tmpdir, 'package.zip')
+        download_file('stride-etl-packages/siri/legacy-packages-index.zip', zip_path)
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(tmpdir)
+        os.rename(os.path.join(tmpdir, 'legacy-packages-index.csv'), os.path.join(tmpdir, 'res_1.csv'))
+        for res in DF.Flow(
+            DF.load(os.path.join(tmpdir, 'legacy-packages-index-metadata.json'), format='datapackage'),
+        ).datastream().res_iter.get_iterator():
+            for row in res:
+                existing_keys[row['key']] = row
+    print(f'Found {len(existing_keys)} existing keys')
     keys_iterator = only_keys if only_keys else iterate_keys('obus-do1', 'SiriForSplunk')
     for keynum, key in enumerate(keys_iterator):
+        if key in existing_keys:
+            row = existing_keys[key]
+            if row['key_processing_error']:
+                print('reprocessing key due to key_processing_error')
+            else:
+                yield row
+                continue
         print(f'Processing key {keynum+1}: {key}')
         max_recorded_at_time = None
         min_recorded_at_time = None
