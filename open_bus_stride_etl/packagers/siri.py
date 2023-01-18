@@ -17,7 +17,7 @@ from open_bus_stride_db import db
 from .common import get_file_last_modified, upload_file, download_file, download_legacy_file, iterate_keys
 
 # can use this to force update after code changes
-FORCE_UPDATE_IF_FILE_LAST_MODIFIED_BEFORE = pytz.timezone('israel').localize(datetime.datetime(2023, 1, 10, 20, 30))
+FORCE_UPDATE_IF_FILE_LAST_MODIFIED_BEFORE = None
 
 UPDATE_PACKAGE_RES_PACKAGE_EXISTS = 'package_exists'
 UPDATE_PACKAGE_RES_SAME_HASH = 'same_hash'
@@ -167,7 +167,7 @@ def update_package(stats, start_datetimehour: datetime.datetime, force_update=Fa
     file_last_modified = get_file_last_modified(package_path)
     package_exists = file_last_modified is not None
     if package_exists:
-        if file_last_modified < FORCE_UPDATE_IF_FILE_LAST_MODIFIED_BEFORE:
+        if FORCE_UPDATE_IF_FILE_LAST_MODIFIED_BEFORE and file_last_modified < FORCE_UPDATE_IF_FILE_LAST_MODIFIED_BEFORE:
             if verbose:
                 print(f'Package {package_path} exists and is old, forcing update')
             stats['package_forced_update_old'] += 1
