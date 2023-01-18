@@ -485,8 +485,6 @@ def legacy_update_packages_from_index(index_from_path=False):
                 if max_recorded_at_time not in hour_keys[current_hour][min_recorded_at_time]:
                     hour_keys[current_hour][min_recorded_at_time][max_recorded_at_time] = []
                 hour_keys[current_hour][min_recorded_at_time][max_recorded_at_time].append(row['key'])
-                break
-            break
         print(f'Processing {num_keys} keys')
         DF.Flow(
             (legacy_update_package_hour(hour, hour_keys[hour]) for hour in sorted(hour_keys.keys())),
