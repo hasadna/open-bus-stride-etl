@@ -9,14 +9,28 @@
         module: open_bus_stride_etl.packagers.siri
         function: hourly_update_packages
 
-- name: stride-etl-packagers-siri-create-legacy-packages-index
+# The index was created and available at https://s3.us-east-1.wasabisys.com/stride/stride-etl-packages/siri/legacy-packages-index.zip
+#- name: stride-etl-packagers-siri-create-legacy-packages-index
+#  description: |
+#    Create index of legacy packages and save in storage
+#  docs:
+#    hide: true
+#  tasks:
+#    - id: packagers-siri-create-legacy-packages-index
+#      config:
+#        type: api
+#        module: open_bus_stride_etl.packagers.siri
+#        function: create_legacy_packages_index
+
+- name: stride-etl-packagers-legacy-update-packages-from-index
+  schedule_interval: "@daily"
   description: |
-    Create index of legacy packages and save in storage
+    Update legacy packages from the previously created index
   docs:
     hide: true
   tasks:
-    - id: packagers-siri-create-legacy-packages-index
+    - id: packagers-legacy-update-packages-from-index
       config:
         type: api
         module: open_bus_stride_etl.packagers.siri
-        function: create_legacy_packages_index
+        function: legacy_update_packages_from_index

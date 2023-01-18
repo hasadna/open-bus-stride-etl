@@ -284,19 +284,24 @@ def legacy_process_row(key, i, row, with_recorded_at_time=True):
     }
 
 
-def iterate_legacy_packages_index(only_keys=None):
-    existing_keys = {}
+def iterate_legacy_packages_index_rows(index_path=None):
     with tempfile.TemporaryDirectory() as tmpdir:
-        zip_path = os.path.join(tmpdir, 'package.zip')
-        download_file('stride-etl-packages/siri/legacy-packages-index.zip', zip_path)
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(tmpdir)
-        os.rename(os.path.join(tmpdir, 'legacy-packages-index.csv'), os.path.join(tmpdir, 'res_1.csv'))
+        if not index_path:
+            zip_path = os.path.join(tmpdir, 'package.zip')
+            download_file('stride-etl-packages/siri/legacy-packages-index.zip', zip_path)
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(tmpdir)
+            os.rename(os.path.join(tmpdir, 'legacy-packages-index.csv'), os.path.join(tmpdir, 'res_1.csv'))
+            index_path = os.path.join(tmpdir, 'legacy-packages-index-metadata.json')
         for res in DF.Flow(
-            DF.load(os.path.join(tmpdir, 'legacy-packages-index-metadata.json'), format='datapackage'),
+            DF.load(index_path, format='datapackage'),
         ).datastream().res_iter.get_iterator():
             for row in res:
-                existing_keys[row['key']] = row
+                yield row
+
+
+def iterate_legacy_packages_index(only_keys=None):
+    existing_keys = {row['key']: row for row in iterate_legacy_packages_index_rows()}
     print(f'Found {len(existing_keys)} existing keys')
     keys_iterator = only_keys if only_keys else iterate_keys('obus-do1', 'SiriForSplunk')
     for keynum, key in enumerate(keys_iterator):
@@ -461,37 +466,31 @@ def legacy_update_packages_from_index(index_from_path=False):
             index_path = os.path.join('.data', 'legacy_packages_index', 'datapackage.json')
             report_path = os.path.join('.data', 'siri_legacy_packages_report')
         else:
-            raise NotImplementedError()
-            # index_zipfilename = os.path.join(tmpdir, 'index.zip')
-            # download_file('stride-etl-packages/siri/legacy-packages-index.zip', index_zipfilename)
-            # # extract zip file
-            # with zipfile.ZipFile(index_zipfilename, 'r') as zip_ref:
-            #     zip_ref.extractall(tmpdir)
-        for res in DF.Flow(
-            DF.load(index_path),
-            DF.printer()
-        ).datastream().res_iter.get_iterator():
-            for row in res:
-                if row['key_processing_error']:
-                    continue
-                num_keys += 1
-                min_recorded_at_time = datetime.datetime.fromisoformat(row['min_recorded_at_time'])
-                max_recorded_at_time = datetime.datetime.fromisoformat(row['max_recorded_at_time'])
-                current_hour = min_recorded_at_time.replace(minute=0, second=0, microsecond=0) - datetime.timedelta(hours=1)
-                end_hour = max_recorded_at_time.replace(minute=0, second=0, microsecond=0) - datetime.timedelta(hours=1)
-                while current_hour <= end_hour:
-                    current_hour += datetime.timedelta(hours=1)
-                    if current_hour not in hour_keys:
-                        hour_keys[current_hour] = {}
-                    if min_recorded_at_time not in hour_keys[current_hour]:
-                        hour_keys[current_hour][min_recorded_at_time] = {}
-                    if max_recorded_at_time not in hour_keys[current_hour][min_recorded_at_time]:
-                        hour_keys[current_hour][min_recorded_at_time][max_recorded_at_time] = []
-                    hour_keys[current_hour][min_recorded_at_time][max_recorded_at_time].append(row['key'])
-                    break
+            index_path = None
+            report_path = os.path.join(tmpdir, 'report')
+        for row in iterate_legacy_packages_index_rows(index_path):
+            if row['key_processing_error']:
+                continue
+            num_keys += 1
+            min_recorded_at_time = datetime.datetime.fromisoformat(row['min_recorded_at_time'])
+            max_recorded_at_time = datetime.datetime.fromisoformat(row['max_recorded_at_time'])
+            current_hour = min_recorded_at_time.replace(minute=0, second=0, microsecond=0) - datetime.timedelta(hours=1)
+            end_hour = max_recorded_at_time.replace(minute=0, second=0, microsecond=0) - datetime.timedelta(hours=1)
+            while current_hour <= end_hour:
+                current_hour += datetime.timedelta(hours=1)
+                if current_hour not in hour_keys:
+                    hour_keys[current_hour] = {}
+                if min_recorded_at_time not in hour_keys[current_hour]:
+                    hour_keys[current_hour][min_recorded_at_time] = {}
+                if max_recorded_at_time not in hour_keys[current_hour][min_recorded_at_time]:
+                    hour_keys[current_hour][min_recorded_at_time][max_recorded_at_time] = []
+                hour_keys[current_hour][min_recorded_at_time][max_recorded_at_time].append(row['key'])
                 break
+            break
         print(f'Processing {num_keys} keys')
         DF.Flow(
             (legacy_update_package_hour(hour, hour_keys[hour]) for hour in sorted(hour_keys.keys())),
-            DF.dump_to_path(report_path)
+            DF.dump_to_path(os.path.join(report_path, 'package'))
         ).process()
+        if not index_from_path:
+            upload_package(report_path, f'stride-etl-packages/siri/legacy-packages-update-report-{now().isoformat()}.zip', 'legacy-packages-update-report')
