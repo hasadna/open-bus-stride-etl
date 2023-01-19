@@ -420,7 +420,7 @@ def extrapolate_hour_keys_hours(keys, keys_hours):
 
 def legacy_update_packages_batch(hours, keys, batch_id):
     print(f'legacy_update_packages_batch: batch_id: {batch_id}, {len(hours)} hours')
-    if str(batch_id) == '1' or get_file_last_modified(f'stride-etl-packages/siri/hours_reports/{batch_id}.json'):
+    if str(batch_id) in ('1', '2') or get_file_last_modified(f'stride-etl-packages/siri/hours_reports/{batch_id}.json'):
         print(f'Already exists')
     else:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -481,13 +481,13 @@ def legacy_update_packages_batch(hours, keys, batch_id):
                                 **json.loads(v.decode('utf-8'))
                             }
 
-                    with tempfile.TemporaryDirectory() as tmpdir:
+                    with tempfile.TemporaryDirectory() as tmpdir_:
                         DF.Flow(
                             iterator(),
-                            DF.dump_to_path(os.path.join(tmpdir, 'package'))
+                            DF.dump_to_path(os.path.join(tmpdir_, 'package'))
                         ).process()
                         print(f'Uploading {package_path}')
-                        hours_report[hour]['url'] = upload_package(tmpdir, package_path, base_filename)
+                        hours_report[hour]['url'] = upload_package(tmpdir_, package_path, base_filename)
             finally:
                 pdb.close()
             with open(os.path.join(tmpdir, 'hours_report.json'), 'w') as f:
