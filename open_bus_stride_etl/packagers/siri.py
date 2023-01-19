@@ -10,6 +10,7 @@ from textwrap import dedent
 from collections import defaultdict
 
 import pytz
+import plyvel
 import dataflows as DF
 
 from ..common import now
@@ -261,9 +262,10 @@ def legacy_get_siri_journey_ref(date, service_id):
     return f'{date}-{service_id}'
 
 
-def legacy_process_row(key, i, row, with_recorded_at_time=True):
+def legacy_process_row(key, i, row, with_recorded_at_time=True, packages_index_key_row_id=None):
+    key = str(packages_index_key_row_id) if packages_index_key_row_id else key
     return {
-        'id': f'{key}_{i}',
+        'id': f'{key}-{i}',
         'lat': row['lat'],
         'lon': row['lon'],
         **(
@@ -273,7 +275,7 @@ def legacy_process_row(key, i, row, with_recorded_at_time=True):
         'siri_scheduled_start_time': legacy_get_datetime_field(row, ['planned_start_date', 'date'], ['planned_start_time']),
         'siri_journey_ref': legacy_get_siri_journey_ref(row['date'], row.get('service_id')),
         'siri_vehicle_ref': row['bus_id'],
-        'siri_stop_code': row.get('stop_point_ref'),
+        'siri_stop_code': row.get('stop_point_ref') or '',
         'siri_operator_ref': row['agency_id'],
         'siri_line_ref': row['route_id'],
         'siri_snapshot_id': key,
@@ -288,7 +290,7 @@ def iterate_legacy_packages_index_rows(index_path=None):
     with tempfile.TemporaryDirectory() as tmpdir:
         if not index_path:
             zip_path = os.path.join(tmpdir, 'package.zip')
-            download_file('stride-etl-packages/siri/legacy-packages-index.zip', zip_path)
+            download_file('stride-etl-packages/siri/legacy-packages-index-2023-01-19T13:44:11.073295+00:00.zip', zip_path)
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(tmpdir)
             os.rename(os.path.join(tmpdir, 'legacy-packages-index.csv'), os.path.join(tmpdir, 'res_1.csv'))
@@ -299,196 +301,245 @@ def iterate_legacy_packages_index_rows(index_path=None):
             for row in res:
                 yield row
 
+# this function is only used for creating the index, we already created the index, no need to create it again
+# def iterate_legacy_packages_index(only_keys=None):
+#     key_overrides = {
+#         'SiriForSplunk/2020/06/16/siri_rt_data_v2.2020-06-16.6.csv.gz': {'min_datetime': '2020-06-16T00:00:00'},
+#         'SiriForSplunk/2020/09/17/siri_rt_data_v2.2020-09-17.2.csv.gz': {'min_datetime': '2020-09-16T00:00:00'},
+#         'SiriForSplunk/2020/06/14/siri_rt_data_v2.2020-06-14.5.csv.gz': {'min_datetime': '2020-06-14T00:00:00'},
+#         'SiriForSplunk/2020/06/04/siri_rt_data_v2.2020-06-04.5.csv.gz': {'max_datetime': '2020-06-05T00:00:00'},
+#     }
+#     reprocess_keys = [l.strip() for l in """
+#         SiriForSplunk/2020/06/16/siri_rt_data_v2.2020-06-16.6.csv.gz
+#         SiriForSplunk/2020/09/17/siri_rt_data_v2.2020-09-17.2.csv.gz
+#         SiriForSplunk/2020/06/14/siri_rt_data_v2.2020-06-14.5.csv.gz
+#         SiriForSplunk/2020/06/04/siri_rt_data_v2.2020-06-04.5.csv.gz
+#     """.splitlines() if l.strip()]
+#     existing_keys = {row['key']: row for row in iterate_legacy_packages_index_rows() if row['key'] not in reprocess_keys}
+#     print(f'Found {len(existing_keys)} existing keys')
+#     keys_iterator = only_keys if only_keys else iterate_keys('obus-do1', 'SiriForSplunk')
+#     for keynum, key in enumerate(keys_iterator):
+#         if key in existing_keys:
+#             row = existing_keys[key]
+#             if row['key_processing_error']:
+#                 print('reprocessing key due to key_processing_error')
+#             else:
+#                 yield {
+#                     **row,
+#                     'keynum': keynum,
+#                     'max_minus_min_days': (datetime.datetime.fromisoformat(row['max_recorded_at_time']) - datetime.datetime.fromisoformat(row['min_recorded_at_time'])).total_seconds() / 60 / 60 / 24,
+#                 }
+#                 continue
+#         print(f'Processing key {keynum}: {key}')
+#         max_recorded_at_time = None
+#         min_recorded_at_time = None
+#         num_rows = 0
+#         num_recorded_at_time_exceptions = 0
+#         num_row_processing_exceptions = 0
+#         key_processing_error = False
+#         # noinspection PyBroadException
+#         try:
+#             assert key.endswith('.csv.gz')
+#             with tempfile.TemporaryDirectory() as tmpdir:
+#                 filename = os.path.join(tmpdir, 'legacy.csv.gz')
+#                 download_legacy_file('obus-do1', key, filename)
+#                 for res in DF.Flow(
+#                     DF.load(filename, cast_strategy=DF.load.CAST_TO_STRINGS, infer_strategy=DF.load.INFER_STRINGS, encoding='utf-8')
+#                 ).datastream().res_iter.get_iterator():
+#                     for i, row in enumerate(res):
+#                         num_rows += 1
+#                         # noinspection PyBroadException
+#                         try:
+#                             legacy_process_row(key, i, row, with_recorded_at_time=False)
+#                         except Exception:
+#                             traceback.print_exc()
+#                             print(f'Error legacy processing row {i}: {row}')
+#                             num_row_processing_exceptions += 1
+#                         recorded_at_time = None
+#                         # noinspection PyBroadException
+#                         try:
+#                             recorded_at_time = legacy_get_datetime_field(row, ['date_recorded', 'date'], ['time_recorded'])
+#                         except Exception:
+#                             traceback.print_exc()
+#                             print(f'Error getting recorded_at_time for row {i}: {row}')
+#                             num_recorded_at_time_exceptions += 1
+#                         if recorded_at_time and recorded_at_time < '2021-09-01T00:00:00+03:00':
+#                             overrides = key_overrides.get(key)
+#                             skip = False
+#                             if overrides:
+#                                 if 'min_datetime' in overrides and datetime.datetime.fromisoformat(recorded_at_time) < pytz.timezone('israel').localize(datetime.datetime.fromisoformat(overrides['min_datetime'])):
+#                                     skip = True
+#                                 if 'max_datetime' in overrides and datetime.datetime.fromisoformat(recorded_at_time) > pytz.timezone('israel').localize(datetime.datetime.fromisoformat(overrides['max_datetime'])):
+#                                     skip = True
+#                             if not skip:
+#                                 if not max_recorded_at_time or recorded_at_time > max_recorded_at_time:
+#                                     max_recorded_at_time = recorded_at_time
+#                                 if not min_recorded_at_time or recorded_at_time < min_recorded_at_time:
+#                                     min_recorded_at_time = recorded_at_time
+#         except Exception:
+#             traceback.print_exc()
+#             print(f'Error processing key')
+#             key_processing_error = True
+#         yield {
+#             'keynum': keynum,
+#             'key': key,
+#             'num_rows': num_rows,
+#             'max_recorded_at_time': max_recorded_at_time,
+#             'min_recorded_at_time': min_recorded_at_time,
+#             'max_minus_min_days': (datetime.datetime.fromisoformat(max_recorded_at_time) - datetime.datetime.fromisoformat(min_recorded_at_time)).total_seconds() / 60 / 60 / 24,
+#             'num_recorded_at_time_exceptions': num_recorded_at_time_exceptions,
+#             'num_row_processing_exceptions': num_row_processing_exceptions,
+#             'key_processing_error': key_processing_error,
+#         }
 
-def iterate_legacy_packages_index(only_keys=None):
-    existing_keys = {row['key']: row for row in iterate_legacy_packages_index_rows()}
-    print(f'Found {len(existing_keys)} existing keys')
-    keys_iterator = only_keys if only_keys else iterate_keys('obus-do1', 'SiriForSplunk')
-    for keynum, key in enumerate(keys_iterator):
-        if key in existing_keys:
-            row = existing_keys[key]
-            if row['key_processing_error']:
-                print('reprocessing key due to key_processing_error')
-            else:
-                yield row
-                continue
-        print(f'Processing key {keynum+1}: {key}')
-        max_recorded_at_time = None
-        min_recorded_at_time = None
-        num_rows = 0
-        num_recorded_at_time_exceptions = 0
-        num_row_processing_exceptions = 0
-        key_processing_error = False
-        # noinspection PyBroadException
-        try:
-            assert key.endswith('.csv.gz')
-            with tempfile.TemporaryDirectory() as tmpdir:
-                filename = os.path.join(tmpdir, 'legacy.csv.gz')
-                download_legacy_file('obus-do1', key, filename)
-                for res in DF.Flow(
-                    DF.load(filename, cast_strategy=DF.load.CAST_TO_STRINGS, infer_strategy=DF.load.INFER_STRINGS, encoding='utf-8')
-                ).datastream().res_iter.get_iterator():
-                    for i, row in enumerate(res):
-                        num_rows += 1
-                        # noinspection PyBroadException
-                        try:
-                            legacy_process_row(key, i, row, with_recorded_at_time=False)
-                        except Exception:
-                            traceback.print_exc()
-                            print(f'Error legacy processing row {i}: {row}')
-                            num_row_processing_exceptions += 1
-                        recorded_at_time = None
-                        # noinspection PyBroadException
-                        try:
-                            recorded_at_time = legacy_get_datetime_field(row, ['date_recorded', 'date'], ['time_recorded'])
-                        except Exception:
-                            traceback.print_exc()
-                            print(f'Error getting recorded_at_time for row {i}: {row}')
-                            num_recorded_at_time_exceptions += 1
-                        if recorded_at_time:
-                            if not max_recorded_at_time or recorded_at_time > max_recorded_at_time:
-                                max_recorded_at_time = recorded_at_time
-                            if not min_recorded_at_time or recorded_at_time < min_recorded_at_time:
-                                min_recorded_at_time = recorded_at_time
-        except Exception:
-            traceback.print_exc()
-            print(f'Error processing key')
-            key_processing_error = True
-        yield {
-            'key': key,
-            'num_rows': num_rows,
-            'max_recorded_at_time': max_recorded_at_time,
-            'min_recorded_at_time': min_recorded_at_time,
-            'num_recorded_at_time_exceptions': num_recorded_at_time_exceptions,
-            'num_row_processing_exceptions': num_row_processing_exceptions,
-            'key_processing_error': key_processing_error,
-        }
+# we already created the index, no need to create it again, the latest index is available at:
+# https://s3.eu-west-2.wasabisys.com/stride/stride-etl-packages/siri/legacy-packages-index-2023-01-19T13:44:11.073295+00:00.zip
+# def create_legacy_packages_index(only_keys=None, dump_to_path=False):
+#     if only_keys is not None:
+#         only_keys = [k.strip() for k in only_keys.split(',') if k.strip()]
+#         if not only_keys:
+#             only_keys = None
+#     print(f'create_legacy_packages_index(only_keys={only_keys}, dump_to_path={dump_to_path})')
+#     with tempfile.TemporaryDirectory() as tmpdir:
+#         output_path = os.path.join('.data', 'legacy_packages_index') if dump_to_path else os.path.join(tmpdir, 'package')
+#         DF.Flow(
+#             iterate_legacy_packages_index(only_keys),
+#             DF.printer(),
+#             DF.dump_to_path(output_path)
+#         ).process()
+#         if not dump_to_path:
+#             upload_package(tmpdir, f'stride-etl-packages/siri/legacy-packages-index-{now().isoformat()}.zip', 'legacy-packages-index')
 
 
-def create_legacy_packages_index(only_keys=None, dump_to_path=False):
-    if only_keys is not None:
-        only_keys = [k.strip() for k in only_keys.split(',') if k.strip()]
-        if not only_keys:
-            only_keys = None
-    print(f'create_legacy_packages_index(only_keys={only_keys}, dump_to_path={dump_to_path})')
-    with tempfile.TemporaryDirectory() as tmpdir:
-        output_path = os.path.join('.data', 'legacy_packages_index') if dump_to_path else os.path.join(tmpdir, 'package')
-        DF.Flow(
-            iterate_legacy_packages_index(only_keys),
-            DF.printer(),
-            DF.dump_to_path(output_path)
-        ).process()
-        if not dump_to_path:
-            upload_package(tmpdir, 'stride-etl-packages/siri/legacy-packages-index.zip', 'legacy-packages-index')
+def extrapolate_hour_keys_hours(keys, keys_hours):
+    hours = set()
+    for key in keys:
+        hours.update(keys_hours[key])
+    return hours
 
 
-def legacy_update_package_hour(hour, min_recorded_at_times):
-    num_row_errors = 0
-    num_keys = 0
-    num_rows = 0
-    num_hour_rows = 0
-    got_exception = False
-    url = ''
-    already_exists = False
-    base_filename = hour.strftime('%Y-%m-%d.%H')
-    package_path = hour.strftime('stride-etl-packages/siri/%Y/%m/') + base_filename + '.zip'
-    if get_file_last_modified(package_path) is None:
-        print(f'legacy_update_package_hour: {hour}')
-        all_keys = set()
-        for max_recorded_at_times in min_recorded_at_times.values():
-            for keys in max_recorded_at_times.values():
-                all_keys.update(keys)
-        # noinspection PyBroadException
-        try:
-            all_rows_by_time = {}
-            for key in all_keys:
-                num_keys += 1
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    download_legacy_file('obus-do1', key, os.path.join(tmpdir, 'legacy.csv.gz'))
-                    for res in DF.Flow(
-                        DF.load(os.path.join(tmpdir, 'legacy.csv.gz'), cast_strategy=DF.load.CAST_TO_STRINGS, infer_strategy=DF.load.INFER_STRINGS, encoding='utf-8'),
-                    ).datastream().res_iter.get_iterator():
-                        for i, row in enumerate(res):
-                            num_rows += 1
-                            outrow = None
-                            # noinspection PyBroadException
-                            try:
-                                outrow = legacy_process_row(key, i, row)
-                            except Exception:
-                                num_row_errors += 1
-                                traceback.print_exc()
-                                print(f'Error legacy processing row {i}: {row}')
-                            if outrow:
-                                recorded_at_time = datetime.datetime.fromisoformat(outrow['recorded_at_time'])
-                                if hour <= recorded_at_time < hour + datetime.timedelta(hours=1):
-                                    if recorded_at_time not in all_rows_by_time:
-                                        all_rows_by_time[recorded_at_time] = []
-                                    all_rows_by_time[recorded_at_time].append({
-                                        k: v for k, v in outrow.items() if k != 'recorded_at_time'
-                                    })
-
-            def iterator():
-                for recorded_at_time in sorted(all_rows_by_time.keys()):
-                    for row in all_rows_by_time[recorded_at_time]:
-                        yield {
-                            'recorded_at_time': recorded_at_time.isoformat(),
-                            **row,
-                        }
-
-            with tempfile.TemporaryDirectory() as tmpdir:
-                DF.Flow(
-                    iterator(),
-                    DF.dump_to_path(os.path.join(tmpdir, 'package'))
-                ).process()
-                url = upload_package(tmpdir, package_path, base_filename)
-        except Exception:
-            traceback.print_exc()
-            got_exception = True
+def legacy_update_packages_batch(hours, keys, batch_id):
+    print(f'legacy_update_packages_batch: batch_id: {batch_id}, {len(hours)} hours')
+    if str(batch_id) == '1' or get_file_last_modified(f'stride-etl-packages/siri/hours_reports/{batch_id}.json'):
+        print(f'Already exists')
     else:
-        already_exists = True
-    return {
-        'hour': hour,
-        'num_row_errors': num_row_errors,
-        'num_keys': num_keys,
-        'num_rows': num_rows,
-        'num_hour_rows': num_hour_rows,
-        'got_exception': got_exception,
-        'url': url,
-        'already_exists': already_exists,
-    }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pdb = plyvel.DB(os.path.join(tmpdir, 'db'), create_if_missing=True)
+            try:
+                pdb_write_batch, pdb_write_batch_size = pdb.write_batch(), 0
+                for key_id, key in keys.items():
+                    print(f'Loading key {key_id}: {key}')
+                    with tempfile.TemporaryDirectory() as tmpdir_:
+                        assert download_legacy_file('obus-do1', key, os.path.join(tmpdir_, 'file.csv.gz')), f'Failed to download: {key}'
+                        num_rows, num_row_errors = 0, 0
+                        for res in DF.Flow(
+                            DF.load(os.path.join(tmpdir_, 'file.csv.gz'), cast_strategy=DF.load.CAST_TO_STRINGS, infer_strategy=DF.load.INFER_STRINGS, encoding='utf-8'),
+                        ).datastream().res_iter.get_iterator():
+                            for row in res:
+                                num_rows += 1
+                                outrow = None
+                                # noinspection PyBroadException
+                                try:
+                                    outrow = legacy_process_row(key, num_rows, row, packages_index_key_row_id=key_id)
+                                except Exception:
+                                    num_row_errors += 1
+                                    traceback.print_exc()
+                                    print(f'Error legacy processing row {num_rows}: {row}')
+                                if outrow:
+                                    pdb_write_batch.put(f"{outrow.pop('recorded_at_time')}_{outrow.pop('id')}".encode('utf-8'), json.dumps(outrow).encode('utf-8'))
+                                    pdb_write_batch_size += 1
+                                    if pdb_write_batch_size >= 100000:
+                                        print(f'Writing {pdb_write_batch_size} rows to pdb')
+                                        pdb_write_batch.write()
+                                        pdb_write_batch, pdb_write_batch_size = pdb.write_batch(), 0
+                    if pdb_write_batch_size > 0:
+                        print(f'Writing {pdb_write_batch_size} rows to pdb')
+                        pdb_write_batch.write()
+                        pdb_write_batch, pdb_write_batch_size = pdb.write_batch(), 0
+                    print(f'loaded {num_rows} rows with {num_row_errors} errors')
+                hours_report = {}
+                for hour in hours:
+                    hours_report[hour] = {
+                        'num_rows': 0,
+                        'min_recorded_at_time': None,
+                        'max_recorded_at_time': None,
+                        'url': None,
+                    }
+                    base_filename = hour.strftime('%Y-%m-%d.%H')
+                    package_path = hour.strftime('stride-etl-packages/siri/%Y/%m/') + base_filename + '.zip'
+
+                    def iterator():
+                        for k, v in pdb.iterator(start=hour.isoformat().encode('utf-8'), stop=(hour + datetime.timedelta(hours=1)).isoformat().encode('utf-8')):
+                            recorded_at_time, id = k.decode('utf-8').split('_')
+                            hours_report[hour]['num_rows'] += 1
+                            if hours_report[hour]['min_recorded_at_time'] is None or recorded_at_time < hours_report[hour]['min_recorded_at_time']:
+                                hours_report[hour]['min_recorded_at_time'] = recorded_at_time
+                            if hours_report[hour]['max_recorded_at_time'] is None or recorded_at_time > hours_report[hour]['max_recorded_at_time']:
+                                hours_report[hour]['max_recorded_at_time'] = recorded_at_time
+                            yield {
+                                'id': id, 'recorded_at_time': recorded_at_time,
+                                **json.loads(v.decode('utf-8'))
+                            }
+
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        DF.Flow(
+                            iterator(),
+                            DF.dump_to_path(os.path.join(tmpdir, 'package'))
+                        ).process()
+                        print(f'Uploading {package_path}')
+                        hours_report[hour]['url'] = upload_package(tmpdir, package_path, base_filename)
+            finally:
+                pdb.close()
+            with open(os.path.join(tmpdir, 'hours_report.json'), 'w') as f:
+                json.dump(hours_report, f)
+            upload_file(os.path.join(tmpdir, 'hours_report.json'), f'stride-etl-packages/siri/hours_reports/{batch_id}.json')
 
 
 def legacy_update_packages_from_index(index_from_path=False):
     hour_keys = {}
-    num_keys = 0
-    with tempfile.TemporaryDirectory() as tmpdir:
-        if index_from_path:
-            index_path = os.path.join('.data', 'legacy_packages_index', 'datapackage.json')
-            report_path = os.path.join('.data', 'siri_legacy_packages_report')
-        else:
-            index_path = None
-            report_path = os.path.join(tmpdir, 'report')
-        for row in iterate_legacy_packages_index_rows(index_path):
-            if row['key_processing_error']:
-                continue
-            num_keys += 1
-            min_recorded_at_time = datetime.datetime.fromisoformat(row['min_recorded_at_time'])
-            max_recorded_at_time = datetime.datetime.fromisoformat(row['max_recorded_at_time'])
-            current_hour = min_recorded_at_time.replace(minute=0, second=0, microsecond=0) - datetime.timedelta(hours=1)
-            end_hour = max_recorded_at_time.replace(minute=0, second=0, microsecond=0) - datetime.timedelta(hours=1)
-            while current_hour <= end_hour:
-                current_hour += datetime.timedelta(hours=1)
-                if current_hour not in hour_keys:
-                    hour_keys[current_hour] = {}
-                if min_recorded_at_time not in hour_keys[current_hour]:
-                    hour_keys[current_hour][min_recorded_at_time] = {}
-                if max_recorded_at_time not in hour_keys[current_hour][min_recorded_at_time]:
-                    hour_keys[current_hour][min_recorded_at_time][max_recorded_at_time] = []
-                hour_keys[current_hour][min_recorded_at_time][max_recorded_at_time].append(row['key'])
-        print(f'Processing {num_keys} keys')
-        DF.Flow(
-            (legacy_update_package_hour(hour, hour_keys[hour]) for hour in sorted(hour_keys.keys())),
-            DF.dump_to_path(os.path.join(report_path, 'package'))
-        ).process()
-        if not index_from_path:
-            upload_package(report_path, f'stride-etl-packages/siri/legacy-packages-update-report-{now().isoformat()}.zip', 'legacy-packages-update-report')
+    keys_hours = {}
+    if index_from_path:
+        index_path = os.path.join('.data', 'legacy_packages_index', 'datapackage.json')
+    else:
+        index_path = None
+    packages_index_key_row_ids = {}
+    for row in iterate_legacy_packages_index_rows(index_path):
+        if row['key_processing_error']:
+            continue
+        packages_index_key_row_ids[row['key']] = str(row['keynum'])
+        min_recorded_at_time = datetime.datetime.fromisoformat(row['min_recorded_at_time'])
+        max_recorded_at_time = datetime.datetime.fromisoformat(row['max_recorded_at_time'])
+        current_hour = min_recorded_at_time.replace(minute=0, second=0, microsecond=0) - datetime.timedelta(hours=1)
+        end_hour = max_recorded_at_time.replace(minute=0, second=0, microsecond=0) - datetime.timedelta(hours=1)
+        while current_hour <= end_hour:
+            current_hour += datetime.timedelta(hours=1)
+            hour_keys.setdefault(current_hour, set()).add(row['key'])
+            keys_hours.setdefault(row['key'], set()).add(current_hour)
+    print(f'Processing {len(keys_hours)} keys, {len(hour_keys)} hours')
+    hour_batches = []
+    all_added_hours = set()
+    largest_batch_hours, largest_batch_keys = 0, 0
+    for hour in sorted(hour_keys.keys()):
+        if hour not in all_added_hours:
+            hours = set()
+            hours.add(hour)
+            for _ in range(4):
+                for hour_ in sorted(list(hours)):
+                    for hour__ in sorted(extrapolate_hour_keys_hours(hour_keys[hour_], keys_hours)):
+                        hours.add(hour__)
+            keys = set()
+            for hour_ in hours:
+                keys.update(hour_keys[hour_])
+            hour_batches.append((hours, keys))
+            if len(keys) > largest_batch_keys:
+                largest_batch_keys = len(keys)
+            if len(hours) > largest_batch_hours:
+                largest_batch_hours = len(hours)
+            all_added_hours.update(hours)
+    print(f'Found {len(hour_batches)} batches (largest batches: {largest_batch_keys} keys, {largest_batch_hours} hours)')
+    batch_num = 0
+    for hours, keys in hour_batches:
+        batch_num += 1
+        print(f'Processing batch #{batch_num} / {len(hour_batches)}')
+        legacy_update_packages_batch(hours, {packages_index_key_row_ids[key]: key for key in keys}, str(batch_num))
+    print("ALL GOOD!")

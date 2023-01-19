@@ -72,11 +72,12 @@ def siri_update_package(date, hour, force_update, verbose):
     print("OK")
 
 
-@packagers.command()
-@click.option('--only-keys', type=str)
-@click.option('--dump-to-path', is_flag=True)
-def siri_create_legacy_packages_index(**kwargs):
-    siri.create_legacy_packages_index(**kwargs)
+# we already created the index, no need to create it again
+# @packagers.command()
+# @click.option('--only-keys', type=str)
+# @click.option('--dump-to-path', is_flag=True)
+# def siri_create_legacy_packages_index(**kwargs):
+#     siri.create_legacy_packages_index(**kwargs)
 
 
 @packagers.command()

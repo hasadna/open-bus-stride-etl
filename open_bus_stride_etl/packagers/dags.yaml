@@ -9,7 +9,7 @@
         module: open_bus_stride_etl.packagers.siri
         function: hourly_update_packages
 
-# The index was created and available at https://s3.us-east-1.wasabisys.com/stride/stride-etl-packages/siri/legacy-packages-index.zip
+# The index was created and available at https://s3.us-east-1.wasabisys.com/stride/stride-etl-packages/siri/legacy-packages-index-2023-01-19T13:44:11.073295+00:00.zip
 #- name: stride-etl-packagers-siri-create-legacy-packages-index
 #  description: |
 #    Create index of legacy packages and save in storage

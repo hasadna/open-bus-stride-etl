@@ -6,3 +6,4 @@ geopy==2.2.0
 python-dotenv==0.20.0
 dataflows==0.3.16
 boto3==1.26.44
+plyvel==1.5.0
