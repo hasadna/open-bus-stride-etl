@@ -420,7 +420,7 @@ def extrapolate_hour_keys_hours(keys, keys_hours):
 
 def legacy_update_packages_batch(hours, keys, batch_id):
     print(f'legacy_update_packages_batch: batch_id: {batch_id}, {len(hours)} hours')
-    if str(batch_id) in ('1', '2') or get_file_last_modified(f'stride-etl-packages/siri/hours_reports/{batch_id}.json'):
+    if str(batch_id) in ('1', '2', '3') or get_file_last_modified(f'stride-etl-packages/siri/hours_reports/{batch_id}.json'):
         print(f'Already exists')
     else:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -459,7 +459,7 @@ def legacy_update_packages_batch(hours, keys, batch_id):
                     print(f'loaded {num_rows} rows with {num_row_errors} errors')
                 hours_report = {}
                 for hour in hours:
-                    hours_report[hour] = {
+                    hours_report_hour = hours_report[hour.isoformat()] = {
                         'num_rows': 0,
                         'min_recorded_at_time': None,
                         'max_recorded_at_time': None,
@@ -471,11 +471,11 @@ def legacy_update_packages_batch(hours, keys, batch_id):
                     def iterator():
                         for k, v in pdb.iterator(start=hour.isoformat().encode('utf-8'), stop=(hour + datetime.timedelta(hours=1)).isoformat().encode('utf-8')):
                             recorded_at_time, id = k.decode('utf-8').split('_')
-                            hours_report[hour]['num_rows'] += 1
-                            if hours_report[hour]['min_recorded_at_time'] is None or recorded_at_time < hours_report[hour]['min_recorded_at_time']:
-                                hours_report[hour]['min_recorded_at_time'] = recorded_at_time
-                            if hours_report[hour]['max_recorded_at_time'] is None or recorded_at_time > hours_report[hour]['max_recorded_at_time']:
-                                hours_report[hour]['max_recorded_at_time'] = recorded_at_time
+                            hours_report_hour['num_rows'] += 1
+                            if hours_report_hour['min_recorded_at_time'] is None or recorded_at_time < hours_report_hour['min_recorded_at_time']:
+                                hours_report_hour['min_recorded_at_time'] = recorded_at_time
+                            if hours_report_hour['max_recorded_at_time'] is None or recorded_at_time > hours_report_hour['max_recorded_at_time']:
+                                hours_report_hour['max_recorded_at_time'] = recorded_at_time
                             yield {
                                 'id': id, 'recorded_at_time': recorded_at_time,
                                 **json.loads(v.decode('utf-8'))
@@ -487,7 +487,7 @@ def legacy_update_packages_batch(hours, keys, batch_id):
                             DF.dump_to_path(os.path.join(tmpdir_, 'package'))
                         ).process()
                         print(f'Uploading {package_path}')
-                        hours_report[hour]['url'] = upload_package(tmpdir_, package_path, base_filename)
+                        hours_report_hour['url'] = upload_package(tmpdir_, package_path, base_filename)
             finally:
                 pdb.close()
             with open(os.path.join(tmpdir, 'hours_report.json'), 'w') as f:
