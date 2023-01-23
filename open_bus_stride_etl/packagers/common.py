@@ -1,4 +1,7 @@
 import os
+import time
+import traceback
+
 import boto3
 import datetime
 import botocore
@@ -36,15 +39,27 @@ def download_file(key, filename):
     get_s3().download_file(BUCKET_NAME, key, filename)
 
 
-def download_legacy_file(bucket_name, key, filename):
-    try:
-        get_s3().download_file(bucket_name, key, filename)
-    except botocore.exceptions.ClientError as e:
-        if e.response['Error']['Code'] == "404":
-            return False
-        else:
-            raise
-    return True
+def download_legacy_file(bucket_name, key, filename, retries=None):
+    if retries is None:
+        try:
+            get_s3().download_file(bucket_name, key, filename)
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == "404":
+                return False
+            else:
+                raise
+        return True
+    else:
+        for i in range(retries):
+            if i > 0:
+                time.sleep((i*i)/3)
+            try:
+                if download_legacy_file(bucket_name, key, filename, retries=None):
+                    return True
+            except Exception:
+                traceback.print_exc()
+            print(f'failed to download {key} from {bucket_name}, retrying... ({i+1}/{retries})')
+        return False
 
 
 def iterate_keys(bucket_name, key_prefix):

@@ -430,7 +430,7 @@ def legacy_update_packages_batch(hours, keys, batch_id):
                 for key_id, key in keys.items():
                     print(f'Loading key {key_id}: {key}')
                     with tempfile.TemporaryDirectory() as tmpdir_:
-                        assert download_legacy_file('obus-do1', key, os.path.join(tmpdir_, 'file.csv.gz')), f'Failed to download: {key}'
+                        assert download_legacy_file('obus-do1', key, os.path.join(tmpdir_, 'file.csv.gz'), retries=5), f'Failed to download: {key}'
                         num_rows, num_row_errors = 0, 0
                         for res in DF.Flow(
                             DF.load(os.path.join(tmpdir_, 'file.csv.gz'), cast_strategy=DF.load.CAST_TO_STRINGS, infer_strategy=DF.load.INFER_STRINGS, encoding='utf-8'),
