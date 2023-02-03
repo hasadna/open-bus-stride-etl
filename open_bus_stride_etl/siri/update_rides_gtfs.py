@@ -105,3 +105,7 @@ def main(min_date, max_date, num_days):
         stats['updated_gtfs_ride_ids_by_journey'] += updated_gtfs_ride_ids_by_journey
         stats['updated_gtfs_ride_ids_by_route'] += updated_gtfs_ride_ids_by_route
         pprint(dict(stats))
+    print("Refreshing gtfs_rides_agg materialized view")
+    with db.get_session() as session:
+        session.execute("refresh materialized view gtfs_rides_agg")
+        session.commit()
