@@ -8,7 +8,7 @@ from open_bus_stride_db import db
 from .common import iterate_siri_route_id_dates
 from ..common import parse_min_max_date_strs, get_db_date_str
 
-
+GTFS_ROTE_DATE_FORMAT = "%y-%m-%d"
 UPDATE_ROUTE_GTFS_RIDE_SQL_TEMPLATE = dedent("""
     update siri_ride
     set route_gtfs_ride_id = gtfs_ride.id
@@ -25,6 +25,22 @@ UPDATE_ROUTE_GTFS_RIDE_SQL_TEMPLATE = dedent("""
     -- so we have all the ride stops data which we must ensure before making these updates
     and siri_ride.updated_duration_minutes is not null
     {extra_where}
+""")
+
+UPDATE_SCHEDULED_GTFS_RIDE_SQL_TEMPLATE = dedent("""
+    update siri_ride
+    set scheduled_time_gtfs_ride_id = gtfs_ride.id
+    from gtfs_ride, gtfs_route, siri_route
+    where 
+    gtfs_route.id = gtfs_ride.gtfs_route_id
+    and gtfs_route.operator_ref = siri_route.operator_ref
+    and gtfs_route.line_ref = siri_route.line_ref
+    and siri_route.id = siri_ride.siri_route_id
+    and gtfs_route.date between '{start_date}' and '{end_date}' 
+    and siri_ride.scheduled_start_time = gtfs_ride.start_time
+    -- if we have updated_duration_minutes it means we updated the duration of the ride
+    -- so we have all the ride stops data which we must ensure before making these updates
+    and siri_ride.updated_duration_minutes is not null
 """)
 
 def main(min_date, max_date, num_days):
@@ -44,6 +60,7 @@ def main(min_date, max_date, num_days):
     ):
         updated_journey_gtfs_ride_ids = 0
         updated_route_gtfs_ride_ids = 0
+        updated_scheduled_gtfs_ride_ids = 0
         updated_gtfs_ride_ids_by_route = 0
         updated_gtfs_ride_ids_by_journey = 0
         with db.get_session() as session:
@@ -60,6 +77,11 @@ def main(min_date, max_date, num_days):
                 and siri_ride.updated_duration_minutes is not null;
             """).format(date))
             updated_journey_gtfs_ride_ids += res.rowcount
+            updated_scheduled_gtfs_ride_ids += session.execute(
+                UPDATE_SCHEDULED_GTFS_RIDE_SQL_TEMPLATE.format(
+                    start_date=date, end_date=get_tommorow_date(date),
+                )
+            ).rowcount
             updated_route_gtfs_ride_ids += session.execute(
                 UPDATE_ROUTE_GTFS_RIDE_SQL_TEMPLATE.format(
                     date=date, minutes='1',
@@ -109,3 +131,7 @@ def main(min_date, max_date, num_days):
     with db.get_session() as session:
         session.execute("refresh materialized view gtfs_rides_agg")
         session.commit()
+
+def get_tommorow_date(date: str) -> str:
+    date = datetime.datetime.strptime(date, GTFS_ROTE_DATE_FORMAT)
+    return (date + datetime.timedelta(days=1)).strftime(GTFS_ROTE_DATE_FORMAT)
