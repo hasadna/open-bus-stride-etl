@@ -8,7 +8,7 @@ from open_bus_stride_db import db
 from .common import iterate_siri_route_id_dates
 from ..common import parse_min_max_date_strs, get_db_date_str
 
-GTFS_ROTE_DATE_FORMAT = "%y-%m-%d"
+GTFS_ROTE_DATE_FORMAT = "%Y-%m-%d"
 UPDATE_ROUTE_GTFS_RIDE_SQL_TEMPLATE = dedent("""
     update siri_ride
     set route_gtfs_ride_id = gtfs_ride.id
@@ -77,11 +77,6 @@ def main(min_date, max_date, num_days):
                 and siri_ride.updated_duration_minutes is not null;
             """).format(date))
             updated_journey_gtfs_ride_ids += res.rowcount
-            updated_scheduled_gtfs_ride_ids += session.execute(
-                UPDATE_SCHEDULED_GTFS_RIDE_SQL_TEMPLATE.format(
-                    start_date=date, end_date=get_tommorow_date(date),
-                )
-            ).rowcount
             updated_route_gtfs_ride_ids += session.execute(
                 UPDATE_ROUTE_GTFS_RIDE_SQL_TEMPLATE.format(
                     date=date, minutes='1',
@@ -117,6 +112,11 @@ def main(min_date, max_date, num_days):
                 and gtfs_route.id = gtfs_ride.gtfs_route_id
                 and gtfs_route.date = '{}'
             """).format(date)).rowcount
+            updated_scheduled_gtfs_ride_ids += session.execute(
+                UPDATE_SCHEDULED_GTFS_RIDE_SQL_TEMPLATE.format(
+                    start_date=date, end_date=get_tommorow_date(date),
+                )
+            ).rowcount
             session.commit()
         print(f"Updated route gtfs ride ids: {updated_route_gtfs_ride_ids}")
         print(f"Updated journey gtfs ride ids: {updated_journey_gtfs_ride_ids}")
