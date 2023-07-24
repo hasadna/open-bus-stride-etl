@@ -129,11 +129,11 @@ def main(min_date, max_date, num_days):
         pprint(dict(stats))
     print("Refreshing gtfs_rides_agg materialized view")
     with db.get_session() as session:
-        session.execute("refresh materialized view gtfs_rides_agg")
+        session.execute("refresh materialized view concurrently gtfs_rides_agg")
         session.commit()
     print("Refreshing gtfs_rides_agg_by_hour materialized view")
     with db.get_session() as session:
-        session.execute("refresh materialized view gtfs_rides_agg_by_hour")
+        session.execute("refresh materialized view concurrently gtfs_rides_agg_by_hour")
         session.commit()
 
 def get_tommorow_date(date: str) -> str:
