@@ -9,6 +9,8 @@ from open_bus_stride_db.model import SiriRide
 from open_bus_stride_etl import common
 
 
+# we don't use a limit in this query due to a known PostgreSQL bug: https://www.postgresql.org/message-id/flat/CA%2BU5nMLbXfUT9cWDHJ3tpxjC3bTWqizBKqTwDgzebCB5bAGCgg%40mail.gmail.com
+# because this query always returns a low number of rows, we limit the number of rows in the code
 GET_FIRST_LAST_SQL_QUERY_TEMPLATE = dedent("""
     select siri_vehicle_location.id, siri_vehicle_location.recorded_at_time
     from siri_vehicle_location, siri_ride_stop, siri_ride
@@ -16,7 +18,6 @@ GET_FIRST_LAST_SQL_QUERY_TEMPLATE = dedent("""
         and siri_ride_stop.siri_ride_id = siri_ride.id
         and siri_ride.id = {siri_ride_id}
     order by siri_vehicle_location.recorded_at_time {order_by} nulls last
-    limit 1
 """)
 
 
@@ -24,7 +25,7 @@ def get_first_last_row(session, siri_ride_id, order_by):
     result: ResultProxy = session.execute(GET_FIRST_LAST_SQL_QUERY_TEMPLATE.format(
         siri_ride_id=siri_ride_id, order_by=order_by)
     )
-    row: Row = result.one_or_none()
+    row: Row = result.first()
     return {
         'id': int(row.id) if row.id else None,
         'recorded_at_time': common.utc(row.recorded_at_time) if row.recorded_at_time else None
