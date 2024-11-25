@@ -71,7 +71,10 @@ def update_duration_minutes(siri_ride, first_row, last_row, stats):
 @session_decorator
 def main(session: Session):
     stats = defaultdict(int)
-    query = session.query(SiriRide).filter(SiriRide.updated_duration_minutes == None)
+    query = session.query(SiriRide).filter(
+        SiriRide.updated_duration_minutes == None,
+        SiriRide.scheduled_start_time > common.now_minus(days=60)
+    )
     total_rows = query.count()
     print("Total rows to update: {}".format(total_rows))
     siri_ride: SiriRide
