@@ -73,7 +73,7 @@ def main(session: Session):
     stats = defaultdict(int)
     query = session.query(SiriRide).filter(
         SiriRide.updated_duration_minutes == None,
-        SiriRide.scheduled_start_time > common.now_minus(days=60)
+        SiriRide.scheduled_start_time > common.now_minus(days=4)
     )
     total_rows = query.count()
     print("Total rows to update: {}".format(total_rows))
