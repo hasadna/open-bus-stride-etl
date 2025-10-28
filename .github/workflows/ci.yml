@@ -20,7 +20,7 @@ jobs:
         docker build $CACHE_FROM_ARG -t app . &&\
         docker tag app "${DOCKER_APP_IMAGE_NAME}:${GITHUB_SHA}" &&\
         docker push "${DOCKER_APP_IMAGE_NAME}:${GITHUB_SHA}" &&\
-        python3 -m pip install ruamel.yaml.clib==0.2.6 ruamel.yaml==0.17.21 &&\
+        python3 -m pip install 'ruamel.yaml.clib<0.3' 'ruamel.yaml==0.18' &&\
         bin/validate_airflow_yaml.py airflow.yaml &&\
         git config --global user.name "Open Bus Stride ETL CI" &&\
         git config --global user.email "open-bus-stride-etl-ci@localhost" &&\
