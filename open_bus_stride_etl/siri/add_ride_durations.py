@@ -21,16 +21,24 @@ GET_FIRST_LAST_SQL_QUERY_TEMPLATE = dedent("""
 """)
 
 
-def get_first_last_row(session, siri_ride_id, order_by):
+def get_first_and_last_rows(session, siri_ride_id):
     result: ResultProxy = session.execute(GET_FIRST_LAST_SQL_QUERY_TEMPLATE.format(
-        siri_ride_id=siri_ride_id, order_by=order_by)
-    )
-    row: Row = result.first()
-    return {
-        'id': int(row.id) if row.id else None,
-        'recorded_at_time': common.utc(row.recorded_at_time) if row.recorded_at_time else None
-    } if row else None
+        siri_ride_id=siri_ride_id, order_by="asc"
+    ))
+    rows = result.fetchall()
+    if not rows:
+        return None, None
 
+    first = rows[0]
+    last = rows[-1]
+
+    def make_dict(row):
+        return {
+            'id': int(row.id) if row.id else None,
+            'recorded_at_time': common.utc(row.recorded_at_time) if row.recorded_at_time else None
+        }
+
+    return make_dict(first), make_dict(last)
 
 def update_first_last_vehicle_locations(siri_ride, first_row, last_row, stats):
     is_updated = False
@@ -71,23 +79,39 @@ def update_duration_minutes(siri_ride, first_row, last_row, stats):
 @session_decorator
 def main(session: Session):
     stats = defaultdict(int)
-    query = session.query(SiriRide).filter(
-        SiriRide.updated_duration_minutes == None,
-        SiriRide.scheduled_start_time > common.now_minus(days=4)
-    )
-    total_rows = query.count()
-    print("Total rows to update: {}".format(total_rows))
-    siri_ride: SiriRide
-    for siri_ride in query:
-        first_row = get_first_last_row(session, siri_ride.id, 'asc')
-        last_row = get_first_last_row(session, siri_ride.id, 'desc')
-        update_first_last_vehicle_locations(siri_ride, first_row, last_row, stats)
-        update_duration_minutes(siri_ride, first_row, last_row, stats)
-        stats['num_rows'] += 1
-        if stats['num_rows'] % 10000 == 0:
-            pprint(dict(stats))
-            print("Processed {} / {} rows..".format(stats['num_rows'], total_rows))
-            session.commit()
+
+    # Time window: last 7 hours
+    end_time = common.now()
+    start_time = end_time - timedelta(hours=7)
+
+    # Process in 14 × 30-minute chunks
+    chunk_size = timedelta(minutes=30)
+    chunk_start = start_time
+
+    while chunk_start < end_time:
+        chunk_end = chunk_start + chunk_size
+
+        print(f"Processing rides between {chunk_start} and {chunk_end}")
+
+        query = session.query(SiriRide).filter(
+            SiriRide.updated_duration_minutes == None,
+            SiriRide.scheduled_start_time >= chunk_start,
+            SiriRide.scheduled_start_time < chunk_end
+        )
+
+        total_rows = query.count()
+        print(f"Total rows in this chunk: {total_rows}")
+
+        for siri_ride in query:
+            first_row, last_row = get_first_and_last_rows(session, siri_ride.id)
+            update_first_last_vehicle_locations(siri_ride, first_row, last_row, stats)
+            update_duration_minutes(siri_ride, first_row, last_row, stats)
+            stats['num_rows'] += 1
+
+        session.commit()         # commit changes for this chunk
+        session.expunge_all()    # free memory for this chunk
+
+        chunk_start = chunk_end  # move to next slice
+
     pprint(dict(stats))
-    print("Processed {} / {} rows..".format(stats['num_rows'], total_rows))
-    session.commit()
+    print(f"Processed total rows: {stats['num_rows']}")
