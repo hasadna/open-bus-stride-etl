@@ -54,12 +54,12 @@
           num_days: {default: "1"}
 
 - name: stride-etl-siri-update-rides-gtfs
-  schedule_interval: "@hourly"
+  schedule_interval: "@daily"
   description: |
     Update siri_ride with related gtfs_ride
   docs:
     desc: |
-      Runs hourly, looks for matching between siri rides and gtfs rides and updates
+      Runs daily, looks for matching between siri rides and gtfs rides and updates
       the following DB fields: [[siri_ride.route_gtfs_ride_id]], 
       [[siri_ride.journey_gtfs_ride_id]], [[siri_ride.gtfs_ride_id]].
   tasks:
@@ -69,9 +69,7 @@
         module: open_bus_stride_etl.siri.cli
         function: update_rides_gtfs
         kwargs:
-          min_date: {}
-          max_date: {}
-          num_days: {default: "1"}
+          input_date: {}
 
 - name: stride-etl-siri-storage-backup-cleanup
   schedule_interval: "@daily"
