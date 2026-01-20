@@ -27,7 +27,7 @@ def main(date=None):
 
     with db.get_session() as session:
         sql = dedent(UPDATE_ROUTE_GTFS_RIDE_QUERY)
-        params = {"date": date}
+        params = {"date": date.isoformat()}
         res = session.execute(sql, params)
         updated_route_gtfs_ride_ids = res.rowcount
         print(f"{updated_route_gtfs_ride_ids=}")
