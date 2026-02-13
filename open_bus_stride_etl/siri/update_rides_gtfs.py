@@ -10,7 +10,8 @@ SET route_gtfs_ride_id = grd.id
 FROM siri_route AS sr
 JOIN gtfs_route AS gr ON sr.line_ref = gr.line_ref
 JOIN gtfs_ride AS grd ON gr.id = grd.gtfs_route_id
-WHERE srd.scheduled_start_time = grd.start_time
+WHERE sr.id = srd.siri_route_id
+AND srd.scheduled_start_time = grd.start_time
 AND srd.scheduled_start_time BETWEEN :date AND (:date + INTERVAL '1 day');
 """
 
