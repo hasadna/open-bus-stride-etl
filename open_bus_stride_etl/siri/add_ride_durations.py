@@ -9,6 +9,18 @@ from open_bus_stride_db.model import SiriRide
 from open_bus_stride_etl import common
 
 
+# Number of siri_ride rows fetched and processed per batch. We must NOT load the
+# whole result set at once: with psycopg2 + SQLAlchemy<2 a plain `for x in query`
+# uses a client-side buffered cursor that materializes every matching row (plus
+# its ORM object) in memory. That is exactly what caused the OOM that got this
+# task disabled in Nov 2024 (https://github.com/hasadna/open-bus-stride-etl/issues/22):
+# fine for a 4-day window, fatal once a backlog built up. We instead paginate by
+# primary key (keyset) so memory is bounded to BATCH_SIZE rows regardless of how
+# far behind the task is. A server-side cursor (stream_results) is not an option
+# here because we commit mid-iteration, which would invalidate the cursor.
+BATCH_SIZE = 1000
+
+
 # we don't use a limit in this query due to a known PostgreSQL bug: https://www.postgresql.org/message-id/flat/CA%2BU5nMLbXfUT9cWDHJ3tpxjC3bTWqizBKqTwDgzebCB5bAGCgg%40mail.gmail.com
 # because this query always returns a low number of rows, we limit the number of rows in the code
 GET_FIRST_LAST_SQL_QUERY_TEMPLATE = dedent("""
@@ -71,23 +83,35 @@ def update_duration_minutes(siri_ride, first_row, last_row, stats):
 @session_decorator
 def main(session: Session):
     stats = defaultdict(int)
-    query = session.query(SiriRide).filter(
-        SiriRide.updated_duration_minutes == None,
-        SiriRide.scheduled_start_time > common.now_minus(days=4)
-    )
-    total_rows = query.count()
+    base_filter = SiriRide.scheduled_start_time > common.now_minus(days=4)
+    total_rows = session.query(SiriRide).filter(
+        SiriRide.updated_duration_minutes == None, base_filter
+    ).count()
     print("Total rows to update: {}".format(total_rows))
+    # Keyset pagination: walk the matching rows ordered by primary key, fetching
+    # at most BATCH_SIZE ORM objects at a time. Each row we process either gets
+    # updated_duration_minutes set (dropping out of the filter) or stays NULL to
+    # be retried on a later run; either way the `id > last_id` bound guarantees
+    # forward progress within this run, so there is no risk of an infinite loop.
+    last_id = 0
     siri_ride: SiriRide
-    for siri_ride in query:
-        first_row = get_first_last_row(session, siri_ride.id, 'asc')
-        last_row = get_first_last_row(session, siri_ride.id, 'desc')
-        update_first_last_vehicle_locations(siri_ride, first_row, last_row, stats)
-        update_duration_minutes(siri_ride, first_row, last_row, stats)
-        stats['num_rows'] += 1
-        if stats['num_rows'] % 10000 == 0:
-            pprint(dict(stats))
-            print("Processed {} / {} rows..".format(stats['num_rows'], total_rows))
-            session.commit()
+    while True:
+        rides = session.query(SiriRide).filter(
+            SiriRide.updated_duration_minutes == None,
+            SiriRide.id > last_id,
+            base_filter
+        ).order_by(SiriRide.id).limit(BATCH_SIZE).all()
+        if not rides:
+            break
+        for siri_ride in rides:
+            last_id = siri_ride.id
+            first_row = get_first_last_row(session, siri_ride.id, 'asc')
+            last_row = get_first_last_row(session, siri_ride.id, 'desc')
+            update_first_last_vehicle_locations(siri_ride, first_row, last_row, stats)
+            update_duration_minutes(siri_ride, first_row, last_row, stats)
+            stats['num_rows'] += 1
+        session.commit()
+        pprint(dict(stats))
+        print("Processed {} / {} rows..".format(stats['num_rows'], total_rows))
     pprint(dict(stats))
     print("Processed {} / {} rows..".format(stats['num_rows'], total_rows))
-    session.commit()
