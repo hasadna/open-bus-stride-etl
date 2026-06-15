@@ -14,12 +14,14 @@ from open_bus_stride_etl import common
 # Number of siri_ride rows fetched and processed per batch. We must NOT load the
 # whole result set at once: with psycopg2 + SQLAlchemy<2 a plain `for x in query`
 # uses a client-side buffered cursor that materializes every matching row (plus
-# its ORM object) in memory. That is exactly what caused the OOM that got this
-# task disabled in Nov 2024 (https://github.com/hasadna/open-bus-stride-etl/issues/22):
-# fine for a 4-day window, fatal once a backlog built up. We instead paginate by
-# primary key (keyset) so memory is bounded to BATCH_SIZE rows regardless of how
-# far behind the task is. A server-side cursor (stream_results) is not an option
-# here because we commit mid-iteration, which would invalidate the cursor.
+# its ORM object) in memory. That OOM is why the task was disabled in Nov 2024
+# (commit d75da16, "uses a lot of RAM"); the disable in turn silently broke the
+# whole SIRI->GTFS enrichment chain, the bug this branch fixes by re-enabling the
+# task (https://github.com/hasadna/open-bus-stride-etl/issues/22). The naive load
+# was fine for a 4-day window, fatal once a backlog built up, so we paginate by
+# primary key (keyset) instead: memory stays bounded to BATCH_SIZE rows regardless
+# of how far behind the task is. A server-side cursor (stream_results) is not an
+# option here because we commit mid-iteration, which would invalidate the cursor.
 BATCH_SIZE = 1000
 
 
@@ -127,8 +129,8 @@ def main(session: Session, min_date=None, max_date=None, num_days=4):
     print("Window id range: {}..{}".format(min_id, max_id))
     # Keyset pagination over [min_id, max_id], fetching at most BATCH_SIZE rows per
     # batch so memory stays bounded regardless of how many rows match. Seeding
-    # last_id at min_id-1 (instead of 0) keeps the first batch from scanning all the
-    # older rows below the window; bounding by `id <= max_id` keeps the final batch
+    # last_id at min_id-1 keeps the first batch from scanning all the older rows
+    # below the window; bounding by `id <= max_id` keeps the final batch
     # from scanning newer rows above it (matters for a past-dated backfill). The
     # `id > last_id` bound guarantees forward progress, so there's no infinite loop
     # even for rows that legitimately stay updated_duration_minutes=NULL this run.
