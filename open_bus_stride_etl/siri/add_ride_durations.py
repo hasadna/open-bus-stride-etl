@@ -157,3 +157,28 @@ def main(session: Session, min_date=None, max_date=None, num_days=4):
         print("Processed {} rows (up to id {})..".format(stats['num_rows'], last_id))
     pprint(dict(stats))
     print("Processed {} rows total".format(stats['num_rows']))
+
+
+def backfill(min_date, max_date):
+    """Run add_ride_durations over a historical window one calendar month at a time.
+
+    This is the one-time backfill for issue #22 (durations were never set from ~Oct
+    2024 on, which left LineProfile ride durations empty and gated the whole SIRI->GTFS
+    chain). main() resolves the window's id-range up front with a MATERIALIZED CTE; over
+    a multi-year range that would materialize every in-window id before the first batch.
+    Splitting into months keeps that lookup (and each run's grouping) bounded. Every
+    per-month run is fully idempotent -- it only touches rows where
+    updated_duration_minutes IS NULL -- so an already-enriched month or a re-run after a
+    crash is a cheap no-op, and running the full range also fills any stray older gaps.
+    The rolling hourly DAG keeps handling recent days unchanged.
+
+    Unlike the rolling task there is no num_days fallback: a backfill must be given an
+    explicit window, so a config-less trigger fails loudly instead of quietly doing the
+    last few days."""
+    assert min_date and max_date, "backfill requires an explicit min_date and max_date"
+    min_date, max_date = common.parse_date_str(min_date), common.parse_date_str(max_date)
+    assert min_date <= max_date
+    print("Backfilling ride durations over {} .. {} in monthly chunks".format(min_date, max_date))
+    for chunk_min, chunk_max in common.iter_month_chunks(min_date, max_date):
+        print("\n===== month chunk {} .. {} =====".format(chunk_min, chunk_max))
+        main(min_date=common.get_db_date_str(chunk_min), max_date=common.get_db_date_str(chunk_max))

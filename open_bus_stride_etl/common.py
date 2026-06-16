@@ -59,6 +59,23 @@ def get_db_date_str(d):
     return d.strftime('%Y-%m-%d')
 
 
+def iter_month_chunks(min_date, max_date):
+    """Yield (chunk_min, chunk_max) date pairs splitting [min_date, max_date) into
+    calendar months. Each chunk starts on min_date (or the 1st of a month) and ends
+    on the 1st of the next month, clamped to max_date. Used to drive a long backfill
+    one month at a time so a per-chunk task keeps its memory / id-range lookup bounded
+    instead of scanning years of rows up front."""
+    chunk_min = min_date
+    while chunk_min < max_date:
+        if chunk_min.month == 12:
+            next_month_start = chunk_min.replace(year=chunk_min.year + 1, month=1, day=1)
+        else:
+            next_month_start = chunk_min.replace(month=chunk_min.month + 1, day=1)
+        chunk_max = min(next_month_start, max_date)
+        yield chunk_min, chunk_max
+        chunk_min = chunk_max
+
+
 @contextmanager
 def print_memory_usage(start_msg, end_msg="Done"):
     print(start_msg)
