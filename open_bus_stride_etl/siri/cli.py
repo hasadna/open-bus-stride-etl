@@ -8,10 +8,13 @@ def siri():
 
 
 @siri.command()
-def add_ride_durations():
+@click.option('--min-date', help='Date string (%Y-%m-%d) specifying the min date to process. Defaults to today minus num_days if not provided.')
+@click.option('--max-date', help='Date string (%Y-%m-%d) specifying the max date to process. Defaults to today if not provided.')
+@click.option('--num-days', default=4, show_default=True, help='min_date defaults to today minus num_days if not provided')
+def add_ride_durations(**kwargs):
     """add duration of rides based on vehicle locations to siri_ride table"""
     from .add_ride_durations import main
-    main()
+    main(**kwargs)
 
 
 @siri.command()
