@@ -25,15 +25,13 @@
     one-time backfill of siri ride durations over a historical window, month by month
   docs:
     desc: |
-      Manually-triggered one-time job (issue #22). Runs add-ride-durations over an
-      arbitrary historical window, splitting it into calendar-month chunks to keep
-      memory and the per-run id-range lookup bounded. The window is passed at trigger
-      time via the dag run config, e.g. {"min_date": "2026-05-01", "max_date": "2026-06-01"};
-      both are required, so a config-less trigger fails loudly instead of quietly doing
-      the last few days. Idempotent: only
-      processes siri_ride rows whose updated_duration_minutes is still null, so re-runs
-      and already-enriched months are cheap no-ops. Not scheduled (schedule_interval
-      null) and the run-time alert is disabled, since a full backfill runs long by design.
+      Manually-triggered one-time backfill (issue #22). Runs add-ride-durations over a
+      historical window, split into calendar-month chunks to keep memory and the id-range
+      lookup bounded. Window is passed via the dag run config, e.g.
+      {"min_date": "2026-05-01", "max_date": "2026-06-01"}; both required, so a config-less
+      trigger fails loudly. Idempotent: only processes rows with null
+      updated_duration_minutes, so re-runs and already-enriched months are cheap no-ops.
+      Unscheduled and run-time alert disabled, since a full backfill runs long by design.
   tasks:
     - id: siri-add-ride-durations-backfill
       config:

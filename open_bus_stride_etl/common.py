@@ -60,11 +60,9 @@ def get_db_date_str(d):
 
 
 def iter_month_chunks(min_date, max_date):
-    """Yield (chunk_min, chunk_max) date pairs splitting [min_date, max_date) into
-    calendar months. Each chunk starts on min_date (or the 1st of a month) and ends
-    on the 1st of the next month, clamped to max_date. Used to drive a long backfill
-    one month at a time so a per-chunk task keeps its memory / id-range lookup bounded
-    instead of scanning years of rows up front."""
+    """Yield (chunk_min, chunk_max) pairs splitting [min_date, max_date) on calendar
+    month boundaries, clamped to the endpoints. Lets a long backfill run a month at a
+    time to keep its memory / id-range lookup bounded."""
     chunk_min = min_date
     while chunk_min < max_date:
         if chunk_min.month == 12:
