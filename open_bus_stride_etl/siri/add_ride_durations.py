@@ -163,6 +163,10 @@ def backfill(min_date, max_date):
     min_date, max_date = common.parse_date_str(min_date), common.parse_date_str(max_date)
     assert min_date <= max_date
     print("Backfilling ride durations over {} .. {} in monthly chunks".format(min_date, max_date))
-    for chunk_min, chunk_max in common.iter_month_chunks(min_date, max_date):
+    # main() treats its max_date as an exclusive day-boundary (scheduled_start_time <=
+    # max_date 00:00) -- correct for the rolling daily job, but it would drop the final
+    # day of an explicit backfill window. Extend the chunker's end by one day so the
+    # full inclusive [min_date, max_date] window is processed, last day included.
+    for chunk_min, chunk_max in common.iter_month_chunks(min_date, max_date + datetime.timedelta(days=1)):
         print("\n===== month chunk {} .. {} =====".format(chunk_min, chunk_max))
         main(min_date=common.get_db_date_str(chunk_min), max_date=common.get_db_date_str(chunk_max))
