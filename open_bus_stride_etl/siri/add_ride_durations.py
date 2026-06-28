@@ -1,14 +1,11 @@
 import datetime
-from pprint import pprint
-from textwrap import dedent
-from collections import defaultdict
 
 import pytz
-from sqlalchemy.engine import ResultProxy, Row
+from sqlalchemy import text
 
 from open_bus_stride_db.db import session_decorator, Session
-from open_bus_stride_db.model import SiriRide
 from open_bus_stride_etl import common
+
 
 UPDATE_FIRST_LAST_VEHICLE_LOCATIONS_AND_DURATION = """
     UPDATE siri_ride sr
