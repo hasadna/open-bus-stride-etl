@@ -49,8 +49,6 @@ SET_DURATION_OLD_TRIPS = """
 @session_decorator
 def main(session: Session, min_date=None, max_date=None, num_days=4):
     stats = {
-        "num_rows_first_vehicle_location_updated": 0,
-        "num_rows_last_vehicle_location_updated": 0,
         "num_rows_updated_duration_minutes": 0,
         "num_rows_too_old_not_updated_duration_minutes": 0,
     }
@@ -64,9 +62,9 @@ def main(session: Session, min_date=None, max_date=None, num_days=4):
         text(UPDATE_FIRST_LAST_VEHICLE_LOCATIONS_AND_DURATION),
         {"min_dt": min_dt, "max_dt": max_dt},
     )
-    stats["num_rows_updated_duration_minutes"] = result_1.rowcount
+    stats["num_rows_updated_duration_minutes"] = result.rowcount
     session.commit()
-    print(f"Query 1: Updated {result_1.rowcount} rows with duration and location data")
+    print(f"Query 1: Updated {result.rowcount} rows with duration and location data")
 
     result_cleanup = session.execute(
         text(SET_DURATION_OLD_TRIPS), {"min_dt": min_dt, "max_dt": max_dt}
