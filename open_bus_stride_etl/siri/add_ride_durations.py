@@ -30,7 +30,6 @@ UPDATE_FIRST_LAST_VEHICLE_LOCATIONS_AND_DURATION = """
             AND sr.updated_duration_minutes IS NULL
     ) locations
     WHERE sr.id = locations.id
-        AND locations.first_id IS NOT NULL
         AND locations.max_time < NOW() - INTERVAL '6 hours';
 """
 
