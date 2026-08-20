@@ -25,27 +25,69 @@ from open_bus_stride_etl import common
 BATCH_SIZE = 1000
 
 
-# we don't use a limit in this query due to a known PostgreSQL bug: https://www.postgresql.org/message-id/flat/CA%2BU5nMLbXfUT9cWDHJ3tpxjC3bTWqizBKqTwDgzebCB5bAGCgg%40mail.gmail.com
-# because this query always returns a low number of rows, we limit the number of rows in the code
-GET_FIRST_LAST_SQL_QUERY_TEMPLATE = dedent("""
-    select siri_vehicle_location.id, siri_vehicle_location.recorded_at_time
-    from siri_vehicle_location, siri_ride_stop, siri_ride
+# Both boundary rows for every ride in the batch, in a single grouped query. This used to
+# be two queries per ride (one `order by recorded_at_time asc`, one `desc`), each gathering
+# and sorting that ride's whole vehicle-location set just to read one row off the top --
+# 2 * BATCH_SIZE round trips per batch, and 2 sorts per ride.
+#
+# `array_agg(id order by recorded_at_time)[1]` picks the id of the earliest/latest row while
+# min/max give the times, so one pass over the batch's vehicle locations produces all four
+# values. Note this still orders by recorded_at_time and never by id: ids are insertion
+# order, and a location can be ingested late while carrying an early recorded_at_time.
+#
+# We still avoid SQL `limit` -- the reason for the original's "read one row in Python" was
+# a known PostgreSQL planner bug with limit:
+# https://www.postgresql.org/message-id/flat/CA%2BU5nMLbXfUT9cWDHJ3tpxjC3bTWqizBKqTwDgzebCB5bAGCgg%40mail.gmail.com
+# The aggregate does the reduction instead, so no limit is involved.
+#
+# `nulls last` on both orderings keeps a null recorded_at_time from winning either end (it
+# can only be picked when every row for the ride is null, same as before). siri_ride itself
+# is not joined: siri_ride_stop.siri_ride_id is the same value the original matched on.
+#
+# The trailing `id asc` only breaks ties between locations sharing one recorded_at_time,
+# which the original resolved by scan order -- i.e. not at all. Making it explicit keeps the
+# chosen id stable across query plans, so a re-run can't flip first/last_vehicle_location_id
+# between two equally-valid rows and restamp updated_first_last_vehicle_locations for nothing
+# (which would keep pushing the 2-day give-up out of reach).
+GET_BATCH_FIRST_LAST_SQL_QUERY_TEMPLATE = dedent("""
+    select
+        siri_ride_stop.siri_ride_id as siri_ride_id,
+        (array_agg(siri_vehicle_location.id order by siri_vehicle_location.recorded_at_time asc nulls last, siri_vehicle_location.id asc))[1] as first_id,
+        min(siri_vehicle_location.recorded_at_time) as first_recorded_at_time,
+        (array_agg(siri_vehicle_location.id order by siri_vehicle_location.recorded_at_time desc nulls last, siri_vehicle_location.id asc))[1] as last_id,
+        max(siri_vehicle_location.recorded_at_time) as last_recorded_at_time
+    from siri_vehicle_location, siri_ride_stop
     where siri_vehicle_location.siri_ride_stop_id = siri_ride_stop.id
-        and siri_ride_stop.siri_ride_id = siri_ride.id
-        and siri_ride.id = {siri_ride_id}
-    order by siri_vehicle_location.recorded_at_time {order_by} nulls last
+        and siri_ride_stop.siri_ride_id in ({siri_ride_ids})
+    group by siri_ride_stop.siri_ride_id
 """)
 
 
-def get_first_last_row(session, siri_ride_id, order_by):
-    result: ResultProxy = session.execute(GET_FIRST_LAST_SQL_QUERY_TEMPLATE.format(
-        siri_ride_id=siri_ride_id, order_by=order_by)
-    )
-    row: Row = result.first()
+def get_batch_first_last_rows(session, siri_ride_ids):
+    """Return {siri_ride_id: (first_row, last_row)} for a batch of rides in one query.
+
+    Rides with no vehicle locations are absent from the result, so callers get
+    (None, None) for them -- the same thing the per-ride query signalled by
+    returning no row at all."""
+    if not siri_ride_ids:
+        return {}
+    result: ResultProxy = session.execute(GET_BATCH_FIRST_LAST_SQL_QUERY_TEMPLATE.format(
+        siri_ride_ids=','.join(str(int(siri_ride_id)) for siri_ride_id in siri_ride_ids)
+    ))
+    row: Row
     return {
-        'id': int(row.id) if row.id else None,
-        'recorded_at_time': common.utc(row.recorded_at_time) if row.recorded_at_time else None
-    } if row else None
+        row.siri_ride_id: (
+            {
+                'id': int(row.first_id) if row.first_id else None,
+                'recorded_at_time': common.utc(row.first_recorded_at_time) if row.first_recorded_at_time else None
+            },
+            {
+                'id': int(row.last_id) if row.last_id else None,
+                'recorded_at_time': common.utc(row.last_recorded_at_time) if row.last_recorded_at_time else None
+            },
+        )
+        for row in result
+    }
 
 
 def update_first_last_vehicle_locations(siri_ride, first_row, last_row, stats):
@@ -145,10 +187,11 @@ def main(session: Session, min_date=None, max_date=None, num_days=4):
         ).order_by(SiriRide.id).limit(BATCH_SIZE).all()
         if not rides:
             break
+        # One grouped query for the whole batch instead of two per ride.
+        first_last_rows = get_batch_first_last_rows(session, [siri_ride.id for siri_ride in rides])
         for siri_ride in rides:
             last_id = siri_ride.id
-            first_row = get_first_last_row(session, siri_ride.id, 'asc')
-            last_row = get_first_last_row(session, siri_ride.id, 'desc')
+            first_row, last_row = first_last_rows.get(siri_ride.id, (None, None))
             update_first_last_vehicle_locations(siri_ride, first_row, last_row, stats)
             update_duration_minutes(siri_ride, first_row, last_row, stats)
             stats['num_rows'] += 1
