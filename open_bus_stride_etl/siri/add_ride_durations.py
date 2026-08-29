@@ -11,17 +11,11 @@ from open_bus_stride_db.model import SiriRide
 from open_bus_stride_etl import common
 
 
-# Number of siri_ride rows fetched and processed per batch. We must NOT load the
-# whole result set at once: with psycopg2 + SQLAlchemy<2 a plain `for x in query`
-# uses a client-side buffered cursor that materializes every matching row (plus
-# its ORM object) in memory. That OOM is why the task was disabled in Nov 2024
-# (commit d75da16, "uses a lot of RAM"); the disable in turn silently broke the
-# whole SIRI->GTFS enrichment chain, the bug this branch fixes by re-enabling the
-# task (https://github.com/hasadna/open-bus-stride-etl/issues/22). The naive load
-# was fine for a 4-day window, fatal once a backlog built up, so we paginate by
-# primary key (keyset) instead: memory stays bounded to BATCH_SIZE rows regardless
-# of how far behind the task is. A server-side cursor (stream_results) is not an
-# option here because we commit mid-iteration, which would invalidate the cursor.
+# Rows fetched/processed per batch. A plain `for x in query` (psycopg2 + SQLAlchemy<2)
+# buffers every matching row client-side, which OOM'd and got this task disabled in
+# Nov 2024 (issue #22). We keyset-paginate by primary key instead, bounding memory to
+# BATCH_SIZE regardless of backlog. A server-side cursor isn't an option: we commit
+# mid-iteration, which would invalidate it.
 BATCH_SIZE = 1000
 
 
@@ -127,13 +121,10 @@ def main(session: Session, min_date=None, max_date=None, num_days=4):
         return
     min_id, max_id = id_range.min_id, id_range.max_id
     print("Window id range: {}..{}".format(min_id, max_id))
-    # Keyset pagination over [min_id, max_id], fetching at most BATCH_SIZE rows per
-    # batch so memory stays bounded regardless of how many rows match. Seeding
-    # last_id at min_id-1 keeps the first batch from scanning all the older rows
-    # below the window; bounding by `id <= max_id` keeps the final batch
-    # from scanning newer rows above it (matters for a past-dated backfill). The
-    # `id > last_id` bound guarantees forward progress, so there's no infinite loop
-    # even for rows that legitimately stay updated_duration_minutes=NULL this run.
+    # Keyset pagination over [min_id, max_id]. last_id starts at min_id-1 and the
+    # `id <= max_id` bound keeps batches from scanning rows outside the window (matters
+    # for a past-dated backfill). `id > last_id` guarantees forward progress, so rows
+    # that legitimately stay updated_duration_minutes=NULL won't loop forever.
     last_id = min_id - 1
     siri_ride: SiriRide
     while True:
@@ -157,3 +148,25 @@ def main(session: Session, min_date=None, max_date=None, num_days=4):
         print("Processed {} rows (up to id {})..".format(stats['num_rows'], last_id))
     pprint(dict(stats))
     print("Processed {} rows total".format(stats['num_rows']))
+
+
+def backfill(min_date, max_date):
+    """Run add_ride_durations over a historical window one calendar month at a time.
+
+    One-time backfill for issue #22 (durations unset from ~Oct 2024 on). main() resolves
+    the window's id-range up front with a MATERIALIZED CTE; over a multi-year range that
+    would materialize every in-window id before the first batch, so we split into months
+    to keep the lookup bounded. Idempotent (only touches updated_duration_minutes IS NULL
+    rows), so already-enriched months and crash re-runs are cheap no-ops. Requires an
+    explicit window -- no num_days fallback -- so a config-less trigger fails loudly."""
+    assert min_date and max_date, "backfill requires an explicit min_date and max_date"
+    min_date, max_date = common.parse_date_str(min_date), common.parse_date_str(max_date)
+    assert min_date <= max_date
+    print("Backfilling ride durations over {} .. {} in monthly chunks".format(min_date, max_date))
+    # main() treats its max_date as an exclusive day-boundary (scheduled_start_time <=
+    # max_date 00:00) -- correct for the rolling daily job, but it would drop the final
+    # day of an explicit backfill window. Extend the chunker's end by one day so the
+    # full inclusive [min_date, max_date] window is processed, last day included.
+    for chunk_min, chunk_max in common.iter_month_chunks(min_date, max_date + datetime.timedelta(days=1)):
+        print("\n===== month chunk {} .. {} =====".format(chunk_min, chunk_max))
+        main(min_date=common.get_db_date_str(chunk_min), max_date=common.get_db_date_str(chunk_max))

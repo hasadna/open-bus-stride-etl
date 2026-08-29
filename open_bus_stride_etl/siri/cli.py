@@ -18,6 +18,15 @@ def add_ride_durations(**kwargs):
 
 
 @siri.command()
+@click.option('--min-date', required=True, help='Date string (%Y-%m-%d) for the start of the backfill window (required).')
+@click.option('--max-date', required=True, help='Date string (%Y-%m-%d) for the end of the backfill window (required).')
+def add_ride_durations_backfill(**kwargs):
+    """one-time backfill of add_ride_durations over a historical window, one month at a time (issue #22)"""
+    from .add_ride_durations import backfill
+    backfill(**kwargs)
+
+
+@siri.command()
 @click.option('--min-date', help='Date string (%Y-%m-%d) specifying the min date to process. Defaults to today minus num_days if not provided.')
 @click.option('--max-date', help='Date string (%Y-%m-%d) specifying the max date to process. Defaults to today if not provided.')
 @click.option('--num-days', default=1, show_default=True, help='min_date defaults to today minus num_days if not provided')
