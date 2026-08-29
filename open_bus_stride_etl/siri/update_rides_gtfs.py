@@ -61,6 +61,7 @@ def main(min_date, max_date, num_days):
         updated_journey_gtfs_ride_ids = 0
         updated_route_gtfs_ride_ids = 0
         updated_scheduled_gtfs_ride_ids = 0
+        updated_gtfs_ride_ids_by_scheduled = 0
         updated_gtfs_ride_ids_by_route = 0
         updated_gtfs_ride_ids_by_journey = 0
         with db.get_session() as session:
@@ -95,6 +96,27 @@ def main(min_date, max_date, num_days):
                     extra_where='and siri_ride.route_gtfs_ride_id is null'
                 )
             ).rowcount
+            # Compute the exact scheduled-time match (siri.scheduled_start_time = gtfs.start_time).
+            updated_scheduled_gtfs_ride_ids += session.execute(
+                UPDATE_SCHEDULED_GTFS_RIDE_SQL_TEMPLATE.format(
+                    start_date=date, end_date=get_tommorow_date(date),
+                )
+            ).rowcount
+            # Assign the final gtfs_ride_id by priority: exact scheduled-time match first
+            # (bulletproof and stable across GTFS feed versions), then the fuzzy time
+            # (route) match, and only then the journey_ref match as a last tiebreaker.
+            # journey_ref must NOT take priority: the operator's real-time trip id only
+            # matches the GTFS trip_id ~3 days/week network-wide, so it is unreliable and
+            # has no time verification. Each step only fills rows still unassigned.
+            updated_gtfs_ride_ids_by_scheduled += session.execute(dedent("""
+                update siri_ride
+                set gtfs_ride_id = gtfs_ride.id
+                from gtfs_ride, gtfs_route
+                where gtfs_ride.id = siri_ride.scheduled_time_gtfs_ride_id
+                and gtfs_route.id = gtfs_ride.gtfs_route_id
+                and gtfs_route.date between '{date}' and '{tomorrow}'
+                and siri_ride.gtfs_ride_id is null
+            """).format(date=date, tomorrow=get_tommorow_date(date))).rowcount
             updated_gtfs_ride_ids_by_route += session.execute(dedent("""
                 update siri_ride
                 set gtfs_ride_id = gtfs_ride.id
@@ -102,7 +124,7 @@ def main(min_date, max_date, num_days):
                 where gtfs_ride.id = siri_ride.route_gtfs_ride_id
                 and gtfs_route.id = gtfs_ride.gtfs_route_id
                 and gtfs_route.date = '{}'
-                and siri_ride.journey_gtfs_ride_id is null
+                and siri_ride.gtfs_ride_id is null
             """).format(date)).rowcount
             updated_gtfs_ride_ids_by_journey += session.execute(dedent("""
                 update siri_ride
@@ -111,19 +133,17 @@ def main(min_date, max_date, num_days):
                 where gtfs_ride.id = siri_ride.journey_gtfs_ride_id
                 and gtfs_route.id = gtfs_ride.gtfs_route_id
                 and gtfs_route.date = '{}'
+                and siri_ride.gtfs_ride_id is null
             """).format(date)).rowcount
-            updated_scheduled_gtfs_ride_ids += session.execute(
-                UPDATE_SCHEDULED_GTFS_RIDE_SQL_TEMPLATE.format(
-                    start_date=date, end_date=get_tommorow_date(date),
-                )
-            ).rowcount
             session.commit()
         print(f"Updated route gtfs ride ids: {updated_route_gtfs_ride_ids}")
         print(f"Updated journey gtfs ride ids: {updated_journey_gtfs_ride_ids}")
+        print(f"Updated gtfs ride ids by scheduled: {updated_gtfs_ride_ids_by_scheduled}")
         print(f"Updated gtfs ride ids by journey: {updated_gtfs_ride_ids_by_journey}")
         print(f"Updated gtfs ride ids by route: {updated_gtfs_ride_ids_by_route}")
         stats['updated_route_gtfs_ride_ids'] += updated_route_gtfs_ride_ids
         stats['updated_journey_gtfs_ride_ids'] += updated_journey_gtfs_ride_ids
+        stats['updated_gtfs_ride_ids_by_scheduled'] += updated_gtfs_ride_ids_by_scheduled
         stats['updated_gtfs_ride_ids_by_journey'] += updated_gtfs_ride_ids_by_journey
         stats['updated_gtfs_ride_ids_by_route'] += updated_gtfs_ride_ids_by_route
         pprint(dict(stats))
