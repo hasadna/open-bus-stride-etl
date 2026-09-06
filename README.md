@@ -30,11 +30,9 @@ Upgrade pip
 venv/bin/pip install --upgrade pip
 ```
 
-You should have a clone of the following repositories in sibling directories:
+You should have a clone of the following repository in a sibling directory:
 
 * `../open-bus-stride-db`: https://github.com/hasadna/open-bus-stride-db
-* `../open-bus-stride-api`: https://github.com/hasadna/open-bus-stride-api
-* `../open-bus-stride-client`: https://github.com/hasadna/open-bus-stride-client
 
 Install dev requirements (this installs above repository as well as this repository as editable for development):
 
