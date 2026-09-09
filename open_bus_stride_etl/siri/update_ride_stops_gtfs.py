@@ -7,7 +7,7 @@ from sqlalchemy.engine import ResultProxy
 
 from open_bus_stride_db import db
 
-from .common import iterate_siri_route_id_dates
+from .common import iterate_siri_route_id_dates, RIDE_DATA_SETTLED_SQL
 from ..common import parse_min_max_date_strs, get_db_date_str
 
 
@@ -23,15 +23,17 @@ def main(min_date, max_date, num_days):
         where_sql=dedent("""
             siri_ride_stop.siri_stop_id = siri_stop.id
             and siri_ride_stop.siri_ride_id = siri_ride.id
-            -- if we have updated_duration_minutes it means we updated the duration of the ride
-            -- so we have all the ride stops data which we must ensure before making these updates
-            and siri_ride.updated_duration_minutes is not null
+            -- only rides which are already over, see RIDE_DATA_SETTLED_SQL
+            and {ride_data_settled}
             and siri_ride_stop.gtfs_stop_id is null
             and gtfs_stop.code = siri_stop.code
             and gtfs_stop.date = '{min_date}'
             and siri_ride.scheduled_start_time >= '{min_date}'
             and siri_ride.scheduled_start_time < '{max_date}'
-        """).format(min_date=get_db_date_str(min_date), max_date=get_db_date_str(max_date))
+        """).format(
+            min_date=get_db_date_str(min_date), max_date=get_db_date_str(max_date),
+            ride_data_settled=RIDE_DATA_SETTLED_SQL
+        )
     ):
         for siri_route_id in siri_route_ids:
             stats['updated_siri_routes'] += 1
@@ -43,12 +45,13 @@ def main(min_date, max_date, num_days):
                     from siri_stop, siri_ride, gtfs_stop
                     where siri_ride_stop.siri_stop_id = siri_stop.id
                     and siri_ride_stop.siri_ride_id = siri_ride.id
-                    and siri_ride.updated_duration_minutes is not null
+                    -- only rides which are already over, see RIDE_DATA_SETTLED_SQL
+                    and {ride_data_settled}
                     and siri_ride_stop.gtfs_stop_id is null
                     and gtfs_stop.code = siri_stop.code
                     and gtfs_stop.date = '{}'
                     and siri_ride.siri_route_id = {};
-                """).format(date, siri_route_id))
+                """).format(date, siri_route_id, ride_data_settled=RIDE_DATA_SETTLED_SQL))
                 stats['updated_ride_stops'] += res.rowcount
                 session.commit()
                 pprint(dict(stats))

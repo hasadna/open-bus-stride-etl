@@ -5,6 +5,24 @@ from .. import common
 from open_bus_stride_db import db
 
 
+# A ride's SIRI data keeps growing while the ride is in progress - siri-etl appends
+# siri_ride_stop / siri_vehicle_location rows for as long as snapshots for it keep arriving - so
+# the GTFS-matching jobs may only touch rides which are already over, otherwise they leave the
+# ride's later stops unmatched. 12 hours after the scheduled start covers the longest scheduled
+# ride plus SIRI ingestion lag.
+#
+# scheduled_start_time is "timestamp without time zone" holding UTC (DateTimeWithTimeZone strips
+# the offset on write), so now() is converted to naive UTC as well: a bare now() is a timestamptz,
+# and comparing it against this column casts it using the session's TimeZone setting, which shifts
+# the interval by the local UTC offset.
+RIDE_DATA_SETTLED_HOURS = 12
+RIDE_DATA_SETTLED_SQL = (
+    "siri_ride.scheduled_start_time < (now() at time zone 'utc') - interval '{} hours'".format(
+        RIDE_DATA_SETTLED_HOURS
+    )
+)
+
+
 def iterate_siri_route_id_dates(where_sql=None, extra_from_sql=None):
     if where_sql:
         where_sql = 'where {}'.format(where_sql)
