@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from open_bus_stride_db import db
 
-from .common import iterate_siri_route_id_dates
+from .common import iterate_siri_route_id_dates, RIDE_DATA_SETTLED_SQL
 from ..common import parse_min_max_date_strs, get_db_date_str
 
 GTFS_ROTE_DATE_FORMAT = "%Y-%m-%d"
@@ -21,11 +21,10 @@ UPDATE_ROUTE_GTFS_RIDE_SQL_TEMPLATE = dedent("""
     and gtfs_route.date = '{date}'
     and siri_ride.scheduled_start_time > gtfs_ride.start_time - '{minutes} minutes'::interval
     and siri_ride.scheduled_start_time < gtfs_ride.start_time + '{minutes} minutes'::interval
-    -- if we have updated_duration_minutes it means we updated the duration of the ride
-    -- so we have all the ride stops data which we must ensure before making these updates
-    and siri_ride.updated_duration_minutes is not null
+    -- only rides which are already over, see RIDE_DATA_SETTLED_SQL
+    and {ride_data_settled}
     {extra_where}
-""")
+""").replace('{ride_data_settled}', RIDE_DATA_SETTLED_SQL)
 
 UPDATE_SCHEDULED_GTFS_RIDE_SQL_TEMPLATE = dedent("""
     update siri_ride
@@ -38,10 +37,9 @@ UPDATE_SCHEDULED_GTFS_RIDE_SQL_TEMPLATE = dedent("""
     and siri_route.id = siri_ride.siri_route_id
     and gtfs_route.date between '{start_date}' and '{end_date}' 
     and siri_ride.scheduled_start_time = gtfs_ride.start_time
-    -- if we have updated_duration_minutes it means we updated the duration of the ride
-    -- so we have all the ride stops data which we must ensure before making these updates
-    and siri_ride.updated_duration_minutes is not null
-""")
+    -- only rides which are already over, see RIDE_DATA_SETTLED_SQL
+    and {ride_data_settled}
+""").replace('{ride_data_settled}', RIDE_DATA_SETTLED_SQL)
 
 def main(min_date, max_date, num_days):
     min_date, max_date = parse_min_max_date_strs(min_date, max_date, num_days)
@@ -53,10 +51,12 @@ def main(min_date, max_date, num_days):
             siri_ride.gtfs_ride_id is null
             and siri_ride.scheduled_start_time >= '{min_date}'
             and siri_ride.scheduled_start_time <= '{max_date}'
-            -- if we have updated_duration_minutes it means we updated the duration of the ride
-            -- so we have all the ride stops data which we must ensure before making these updates
-            and siri_ride.updated_duration_minutes is not null
-        """).format(min_date=get_db_date_str(min_date), max_date=get_db_date_str(max_date))
+            -- only rides which are already over, see RIDE_DATA_SETTLED_SQL
+            and {ride_data_settled}
+        """).format(
+            min_date=get_db_date_str(min_date), max_date=get_db_date_str(max_date),
+            ride_data_settled=RIDE_DATA_SETTLED_SQL
+        )
     ):
         updated_journey_gtfs_ride_ids = 0
         updated_route_gtfs_ride_ids = 0
@@ -72,10 +72,9 @@ def main(min_date, max_date, num_days):
                 where gtfs_ride.journey_ref = split_part(siri_ride.journey_ref, '-', 4) || '_' || split_part(siri_ride.journey_ref, '-', 3) || split_part(siri_ride.journey_ref, '-', 2) || substr(split_part(siri_ride.journey_ref, '-', 1), 3)
                 and gtfs_route.id = gtfs_ride.gtfs_route_id
                 and gtfs_route.date = '{}'
-                -- if we have updated_duration_minutes it means we updated the duration of the ride
-                -- so we have all the ride stops data which we must ensure before making these updates
-                and siri_ride.updated_duration_minutes is not null;
-            """).format(date))
+                -- only rides which are already over, see RIDE_DATA_SETTLED_SQL
+                and {ride_data_settled};
+            """).format(date, ride_data_settled=RIDE_DATA_SETTLED_SQL))
             updated_journey_gtfs_ride_ids += res.rowcount
             updated_route_gtfs_ride_ids += session.execute(
                 UPDATE_ROUTE_GTFS_RIDE_SQL_TEMPLATE.format(
