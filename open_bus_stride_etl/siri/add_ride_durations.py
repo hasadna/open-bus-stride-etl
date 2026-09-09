@@ -45,6 +45,14 @@ SET_DURATION_OLD_TRIPS = """
 """
 
 
+def iterate_days(min_date, max_date):
+    """Yields each date in [min_date, max_date)."""
+    day = min_date
+    while day < max_date:
+        yield day
+        day += datetime.timedelta(days=1)
+
+
 @session_decorator
 def main(session: Session, min_date=None, max_date=None, num_days=4):
     stats = {
@@ -54,21 +62,29 @@ def main(session: Session, min_date=None, max_date=None, num_days=4):
 
     min_date, max_date = common.parse_min_max_date_strs(min_date, max_date, num_days)
     print("min_date={} max_date={}".format(min_date, max_date))
-    min_dt = pytz.UTC.localize(datetime.datetime.combine(min_date, datetime.time.min))
-    max_dt = pytz.UTC.localize(datetime.datetime.combine(max_date, datetime.time.min))
 
-    result = session.execute(
-        text(UPDATE_FIRST_LAST_VEHICLE_LOCATIONS_AND_DURATION),
-        {"min_dt": min_dt, "max_dt": max_dt},
-    )
-    stats["num_rows_updated_duration_minutes"] = result.rowcount
-    session.commit()
-    print(f"Query 1: Updated {result.rowcount} rows with duration and location data")
+    # A day per transaction, rather than one statement over the whole window. The
+    # hourly DAG only asks for 4 days, but this is also the entrypoint an operator
+    # runs with an explicit --min-date/--max-date to fill a gap, and there the window
+    # is months: query 1 has to sort every vehicle location in the range through the
+    # window functions before it writes a single row, and an interruption anywhere in
+    # that range rolls all of it back, so a long backfill can never finish. Chunking
+    # bounds the sort to one day and keeps whatever days already completed.
+    for day in iterate_days(min_date, max_date):
+        min_dt = pytz.UTC.localize(datetime.datetime.combine(day, datetime.time.min))
+        max_dt = min_dt + datetime.timedelta(days=1)
+        params = {"min_dt": min_dt, "max_dt": max_dt}
 
-    result_cleanup = session.execute(
-        text(SET_DURATION_OLD_TRIPS), {"min_dt": min_dt, "max_dt": max_dt}
-    )
-    stats["num_rows_too_old_not_updated_duration_minutes"] = result_cleanup.rowcount
-    session.commit()
-    print(f"Query 2: Set {result_cleanup.rowcount} rows to duration=0")
+        result = session.execute(
+            text(UPDATE_FIRST_LAST_VEHICLE_LOCATIONS_AND_DURATION), params
+        )
+        stats["num_rows_updated_duration_minutes"] += result.rowcount
+        session.commit()
+        print(f"{day} Query 1: Updated {result.rowcount} rows with duration and location data")
+
+        result_cleanup = session.execute(text(SET_DURATION_OLD_TRIPS), params)
+        stats["num_rows_too_old_not_updated_duration_minutes"] += result_cleanup.rowcount
+        session.commit()
+        print(f"{day} Query 2: Set {result_cleanup.rowcount} rows to duration=0")
+
     print(f"\nFinal stats: {stats}")
